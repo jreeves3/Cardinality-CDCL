@@ -31,6 +31,8 @@ OPTION( blockocclim,     1e2,  1,2e9,2,0,1, "occurrence limit") \
 OPTION( bump,              1,  0,  1,0,0,1, "bump variables") \
 OPTION( bumpreason,        1,  0,  1,0,0,1, "bump reason literals too") \
 OPTION( bumpreasondepth,   1,  1,  3,0,0,1, "bump reason depth") \
+OPTION( ccdclBump,             0,  0,  1,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclInit,             0,  0,  1,0,0,0, "init card clauses with higher scores") \
 OPTION( check,             0,  0,  1,0,0,0, "enable internal checking") \
 OPTION( checkassumptions,  1,  0,  1,0,0,0, "check assumptions satisfied") \
 OPTION( checkconstraint,   1,  0,  1,0,0,0, "check constraint satisfied") \
@@ -38,7 +40,7 @@ OPTION( checkfailed,       1,  0,  1,0,0,0, "check failed literals form core") \
 OPTION( checkfrozen,       0,  0,  1,0,0,0, "check all frozen semantics") \
 OPTION( checkproof,        1,  0,  1,0,0,0, "check proof internally") \
 OPTION( checkwitness,      1,  0,  1,0,0,0, "check witness internally") \
-OPTION( chrono,            1,  0,  2,0,0,1, "chronological backtracking") \
+OPTION( chrono,            0,  0,  2,0,0,1, "chronological backtracking") \
 OPTION( chronoalways,      0,  0,  1,0,0,1, "force always chronological") \
 OPTION( chronolevelim,   1e2,  0,2e9,0,0,1, "chronological level limit") \
 OPTION( chronoreusetrail,  1,  0,  1,0,0,1, "reuse trail chronologically") \
@@ -58,7 +60,7 @@ OPTION( covermaxeff,     1e8,  0,2e9,1,0,1, "maximum cover efficiency") \
 OPTION( coverminclslim,    2,  2,2e9,0,0,1, "minimum clause size") \
 OPTION( covermineff,     1e6,  0,2e9,1,0,1, "minimum cover efficiency") \
 OPTION( coverreleff,       4,  1,1e5,1,0,1, "relative efficiency per mille") \
-OPTION( decompose,         1,  0,  1,0,1,1, "decompose BIG in SCCs and ELS") \
+OPTION( decompose,         0,  0,  1,0,1,1, "decompose BIG in SCCs and ELS") \
 OPTION( decomposerounds,   2,  1, 16,1,0,1, "number of decompose rounds") \
 OPTION( deduplicate,       1,  0,  1,0,1,1, "remove duplicated binaries") \
 OPTION( eagersubsume,      1,  0,  1,0,0,1, "subsume recently learned") \
@@ -101,11 +103,11 @@ OPTION( instantiateocclim, 1,  1,2e9,2,0,1, "maximum occurrence limit") \
 OPTION( instantiateonce,   1,  0,  1,0,0,1, "instantiate each clause once") \
 LOGOPT( log,               0,  0,  1,0,0,0, "enable logging") \
 LOGOPT( logsort,           0,  0,  1,0,0,0, "sort logged clauses") \
-OPTION( lucky,             1,  0,  1,0,0,1, "search for lucky phases") \
+OPTION( lucky,             0,  0,  1,0,0,1, "search for lucky phases") \
 OPTION( minimize,          1,  0,  1,0,0,1, "minimize learned clauses") \
 OPTION( minimizedepth,   1e3,  0,1e3,0,0,1, "minimization depth") \
 OPTION( phase,             1,  0,  1,0,0,1, "initial phase") \
-OPTION( probe,             1,  0,  1,0,1,1, "failed literal probing" ) \
+OPTION( probe,             0,  0,  1,0,1,1, "failed literal probing" ) \
 OPTION( probehbr,          1,  0,  1,0,0,1, "learn hyper binary clauses") \
 OPTION( probeint,        5e3,  1,2e9,0,0,1, "probing interval" ) \
 OPTION( probemaxeff,     1e8,  0,2e9,1,0,1, "maximum probing efficiency") \
@@ -168,7 +170,7 @@ OPTION( ternarymineff,   1e6,  1,2e9,1,0,1, "minimum ternary efficiency") \
 OPTION( ternaryocclim,   1e2,  1,2e9,2,0,1, "ternary occurrence limit") \
 OPTION( ternaryreleff,    10,  1,1e5,1,0,1, "relative efficiency per mille") \
 OPTION( ternaryrounds,     2,  1, 16,1,0,1, "maximum ternary rounds") \
-OPTION( transred,          1,  0,  1,0,1,1, "transitive reduction of BIG") \
+OPTION( transred,          0,  0,  1,0,1,1, "transitive reduction of BIG") \
 OPTION( transredmaxeff,  1e8,  0,2e9,1,0,1, "maximum efficiency") \
 OPTION( transredmineff,  1e6,  0,2e9,1,0,1, "minimum efficiency") \
 OPTION( transredreleff,  1e2,  1,1e5,1,0,1, "relative efficiency per mille") \
@@ -179,7 +181,7 @@ OPTION( vivifymineff,    2e4,  0,2e9,1,0,1, "minimum efficiency") \
 OPTION( vivifyonce,        0,  0,  2,0,0,1, "vivify once: 1=red, 2=red+irr") \
 OPTION( vivifyredeff,     75,  0,1e3,1,0,1, "redundant efficiency per mille") \
 OPTION( vivifyreleff,     20,  1,1e5,1,0,1, "relative efficiency per mille") \
-OPTION( walk,              1,  0,  1,0,0,1, "enable random walks") \
+OPTION( walk,              0,  0,  1,0,0,1, "enable random walks") \
 OPTION( walkmaxeff,      1e7,  0,2e9,1,0,1, "maximum efficiency") \
 OPTION( walkmineff,      1e5,  0,1e7,1,0,1, "minimum efficiency") \
 OPTION( walknonstable,     1,  0,  1,0,0,1, "walk in non-stabilizing phase") \

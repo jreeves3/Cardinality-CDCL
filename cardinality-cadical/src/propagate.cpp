@@ -121,6 +121,366 @@ void Internal::search_assign_driving (int lit, Clause * c) {
   search_assign (lit, c);
 }
 
+
+bool Internal::CARpropagate () {
+
+  if (level) require_mode (SEARCH);
+  assert (!unsat);
+
+  START (propagate);
+
+  // Updating statistics counter in the propagation loops is costly so we
+  // delay until propagation ran to completion.
+  //
+  int64_t before = propagated;
+
+  int64_t car_missed_propagated_literals = 0;
+  int64_t car_propagated_literals = 0;
+  int64_t car_propagation = 0; 
+  int64_t car_conflict = 0;
+  cardinality_conflict_literal = 0;
+
+  while (!conflict && propagated != trail.size ()) {
+
+    const int lit = -trail[propagated++];
+    LOG ("propagating %d", -lit);
+    Watches & ws = watches (lit);
+
+    const const_watch_iterator eow = ws.end ();
+    watch_iterator j = ws.begin ();
+    const_watch_iterator i = j;
+
+    while (i != eow) {
+
+      const Watch w = *j++ = *i++;
+
+      // blit = 0 for cardinality constraints >= 2
+      const signed char b = (!w.cardinality_clause()) ? val (w.get_blit()) : 0;
+
+      if (b > 0) continue;                // blocking literal satisfied
+
+      if (w.binary ()) {
+
+        // In principle we can ignore garbage binary clauses too, but that
+        // would require to dereference the clause pointer all the time with
+        //
+        // if (w.clause->garbage) { j--; continue; } // (*)
+        //
+        // This is too costly.  It is however necessary to produce correct
+        // proof traces if binary clauses are traced to be deleted ('d ...'
+        // line) immediately as soon they are marked as garbage.  Actually
+        // finding instances where this happens is pretty difficult (six
+        // parallel fuzzing jobs in parallel took an hour), but it does
+        // occur.  Our strategy to avoid generating incorrect proofs now is
+        // to delay tracing the deletion of binary clauses marked as garbage
+        // until they are really deleted from memory.  For large clauses
+        // this is not necessary since we have to access the clause anyhow.
+        //
+        // Thanks go to Mathias Fleury, who wanted me to explain why the
+        // line '(*)' above was in the code. Removing it actually really
+        // improved running times and thus I tried to find concrete
+        // instances where this happens (which I found), and then
+        // implemented the described fix.
+
+        // Binary clauses are treated separately since they do not require
+        // to access the clause at all (only during conflict analysis, and
+        // there also only to simplify the code).
+
+        if (b < 0) conflict = w.clause;          // but continue ...
+        else search_assign (w.get_blit(), w.clause);
+
+      } else {
+
+        if (conflict) break; // Stop if there was a binary conflict already.
+
+        // The cache line with the clause data is forced to be loaded here
+        // and thus this first memory access below is the real hot-spot of
+        // the solver.  Note, that this check is positive very rarely and
+        // thus branch prediction should be almost perfect here.
+
+        if (w.clause->garbage) { j--; continue; }
+
+        if (!w.cardinality_clause()) { // normal clause
+
+          literal_iterator lits = w.clause->begin ();
+
+          // Simplify code by forcing 'lit' to be the second literal in the
+          // clause.  This goes back to MiniSAT.  We use a branch-less version
+          // for conditionally swapping the first two literals, since it
+          // turned out to be substantially faster than this one
+          //
+          //  if (lits[0] == lit) swap (lits[0], lits[1]);
+          //
+          // which achieves the same effect, but needs a branch.
+          //
+          const int other = lits[0] ^ lits[1] ^ lit;
+          const signed char u = val (other); // value of the other watch
+
+          if (u > 0) j[-1].set_blit(other); // satisfied, just replace blit
+          else {
+
+            // This follows Ian Gent's (JAIR'13) idea of saving the position
+            // of the last watch replacement.  In essence it needs two copies
+            // of the default search for a watch replacement (in essence the
+            // code in the 'if (v < 0) { ... }' block below), one starting at
+            // the saved position until the end of the clause and then if that
+            // one failed to find a replacement another one starting at the
+            // first non-watched literal until the saved position.
+
+            const int size = w.clause->size;
+            const literal_iterator middle = lits + w.clause->pos;
+            const const_literal_iterator end = lits + size;
+            literal_iterator k = middle;
+
+            // Find replacement watch 'r' at position 'k' with value 'v'.
+
+            int r = 0;
+            signed char v = -1;
+
+            while (k != end && (v = val (r = *k)) < 0)
+              k++;
+
+            if (v < 0) {  // need second search starting at the head?
+
+              k = lits + 2;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+
+            w.clause->pos = k - lits;  // always save position
+
+            assert (lits + 2 <= k), assert (k <= w.clause->end ());
+
+            if (v > 0) {
+
+              // Replacement satisfied, so just replace 'blit'.
+
+              j[-1].set_blit(r);
+
+            } else if (!v) {
+
+              // Found new unassigned replacement literal to be watched.
+
+              LOG (w.clause, "unwatch %d in", lit);
+
+              lits[0] = other;
+              lits[1] = r;
+              *k = lit;
+
+              watch_literal (r, lit, w.clause);
+
+              j--;  // Drop this watch from the watch list of 'lit'.
+
+            } else if (!u) {
+
+              assert (v < 0);
+
+              // The other watch is unassigned ('!u') and all other literals
+              // assigned to false (still 'v < 0'), thus we found a unit.
+              //
+              search_assign (other, w.clause);
+
+              // Similar code is in the implementation of the SAT'18 paper on
+              // chronological backtracking but in our experience, this code
+              // first does not really seem to be necessary for correctness,
+              // and further does not improve running time either.
+              //
+              if (opts.chrono > 1) {
+
+                const int other_level = var (other).level;
+
+                if (other_level > var (lit).level) {
+
+                  // The assignment level of the new unit 'other' is larger
+                  // than the assignment level of 'lit'.  Thus we should find
+                  // another literal in the clause at that higher assignment
+                  // level and watch that instead of 'lit'.
+
+                  assert (size > 2);
+
+                  int pos, s = 0;
+
+                  for (pos = 2; pos < size; pos++)
+                    if (var (s = lits[pos]).level == other_level)
+                      break;
+
+                  assert (s);
+                  assert (pos < size);
+
+                  LOG (w.clause, "unwatch %d in", lit);
+                  lits[pos] = lit;
+                  lits[0] = other;
+                  lits[1] = s;
+                  watch_literal (s, other, w.clause);
+
+                  j--;  // Drop this watch from the watch list of 'lit'.
+                }
+              }
+            } else {
+
+              assert (u < 0);
+              assert (v < 0);
+
+              // The other watch is assigned false ('u < 0') and all other
+              // literals as well (still 'v < 0'), thus we found a conflict.
+
+              conflict = w.clause;
+              break;
+            }
+          }
+        } else { // cardinality constraint
+
+          literal_iterator lits = w.clause->begin ();
+
+          const int unwatched = w.clause->unwatched;
+
+          const int size = w.clause->size;
+          const literal_iterator middle = lits + w.clause->pos;
+          const const_literal_iterator end = lits + size;
+          literal_iterator k = middle;
+
+          // Find replacement watch 'r' at position 'k' with value 'v'.
+
+          int r = 0;
+          signed char v = -1;
+          if (size > unwatched) { // at least 1 unwatched literal
+
+            while (k != end && (v = val (r = *k)) < 0)
+              k++;
+
+            if (v < 0) {  // need second search starting at the head?
+
+              k = lits + unwatched;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+
+            w.clause->pos = k - lits;  // always save position
+
+            assert (lits + unwatched <= k), assert (k <= w.clause->end ());
+          } //else every literal is watched, no replacement possible
+
+
+          if (v >= 0) { // Replacement satisfied or unassigned, simple swap
+
+            assert (k-lits >= unwatched); // k is not watched currently
+
+            int my_lit_pos = w.get_blit();
+
+            // swap position
+            lits[my_lit_pos] = r;
+            *k = lit;
+            
+            // watch new literal at position my_lit_pos
+            CARwatch_literal (r, my_lit_pos, w.clause);
+            j--;  // Drop this watch from the watch list of 'lit'.
+            LOG (w.clause, "unwatch %d in", lit);
+
+          } else {
+
+            // check if we can propagate all unassigned watched literals
+            // i.e., no other watched literal falsified
+
+            for (int i = 0; i < unwatched; i++) {
+              if (lits[i] != lit && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
+            }
+
+            if (!cardinality_conflict_literal) { // propagate all other watches
+              
+              for (int i = 0; i < unwatched; i++) { 
+                if (lits[i] != lit) assert (val (lits[i]) >= 0);
+                if (val (lits[i]) == 0) {
+                  car_propagated_literals++;
+                  search_assign (lits[i], w.clause);
+                } else { if (lits[i] != lit) car_missed_propagated_literals++;}
+              }
+
+              w.clause->reason_literal = lit; // update reason for propagation
+
+              car_propagation++; // increment propagation count
+            } else { //  conflict
+              // More than one watch assigned to false, breaking cardinality constraint
+
+              for (int i = unwatched+1; i < size; i++) {
+                assert( val (lits[i]) < 0);
+              }
+
+              conflict = w.clause;
+
+              w.clause->reason_literal = lit; // update reason for propagation
+              car_conflict++;
+
+              break;
+
+            }
+          }
+          
+          // // sanity check that wathes all still exist for cardinality clause
+          // int num_watches = 0;
+          // lits = (w.clause)->begin ();
+          // for (int i = 0; i < w.clause->unwatched; i++) {
+
+          //   if (CARcheck_watch (lits[i], w.clause)) num_watches++;
+          // }
+          // for (int i =  w.clause->unwatched; i < w.clause->size; i++)
+          //   if (val (w.clause->literals[i]) >= 0) printf("ERROR");
+          // if (num_watches != w.clause->unwatched) {
+          //   VERBOSE (1, "lost watches");
+          //   exit (1);
+          // }
+
+        }
+      }
+    }
+
+    if (j != i) {
+
+      while (i != eow)
+        *j++ = *i++;
+
+      ws.resize (j - ws.begin ());
+    }
+  }
+
+  if (searching_lucky_phases) {
+
+    if (conflict)
+      LOG (conflict, "ignoring lucky conflict");
+
+  } else {
+
+    // Avoid updating stats eagerly in the hot-spot of the solver.
+    //
+    stats.propagations.search += propagated - before;
+
+    // Cardinality stats
+    stats.car_missed_propagated_literals += car_missed_propagated_literals;
+    stats.car_propagated_literals += car_propagated_literals;
+    stats.car_propagation += car_propagation; 
+    stats.car_conflict += car_conflict;
+
+
+    if (!conflict) no_conflict_until = propagated;
+    else {
+
+      if (stable) stats.stabconflicts++;
+      stats.conflicts++;
+
+      LOG (conflict, "conflict");
+
+      // The trail before the current decision level was conflict free.
+      //
+      no_conflict_until = control[level].trail;
+    }
+  }
+
+  STOP (propagate);
+
+  return !conflict;
+}
+
 /*------------------------------------------------------------------------*/
 
 // The 'propagate' function is usually the hot-spot of a CDCL SAT solver.
@@ -141,6 +501,10 @@ void Internal::search_assign_driving (int lit, Clause * c) {
 // more bytes for each clause.
 
 bool Internal::propagate () {
+
+  VERBOSE (1, "Original propagating");
+  LOG ("original propagating");
+  exit (1);
 
   if (level) require_mode (SEARCH);
   assert (!unsat);

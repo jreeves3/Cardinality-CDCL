@@ -90,6 +90,10 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
   int ch, clauses = 0;
   vars = 0;
 
+  bool knf = false;
+  bool cardinality = false;
+  bool first_lit = true;
+
   // First read comments before header with possibly embedded options.
   //
   for (;;) {
@@ -124,8 +128,9 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
   // Now read 'p cnf <var> <clauses>' header of DIMACS file
   // or 'p inccnf' of incremental 'INCCNF' file.
   //
-  if (ch == 'c')
+  if (ch == 'c' || ch == 'k')
     {
+      if (ch == 'k') knf = true;
       assert (!found_inccnf_header);
       if (strict == STRICT) {
         const char * err = parse_string ("nf ", 'c');
@@ -211,6 +216,10 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
       continue;
     }
     if (ch == 'a' && found_inccnf_header) break;
+    if (ch == 'k') {
+      cardinality = true;
+      continue;
+    }
     const char * err = parse_lit (ch, lit, vars, strict);
     if (err) return err;
     if (ch == 'c') {
@@ -218,7 +227,18 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
         if (ch == EOF)
           PER ("unexpected end-of-file in comment");
     }
-    solver->add (lit);
+    if (knf) {
+      if (first_lit) {
+        if (!cardinality)
+          solver->CARadd (1); // normal clause, cardinality 1
+        first_lit = false;
+      }
+      solver->CARadd (lit);
+      cardinality = false;
+    } else solver->add (lit);
+
+    if (lit == 0) first_lit = true;
+
     if (!found_inccnf_header &&
         !lit && parsed++ >= clauses && strict != FORCED)
       PER ("too many clauses");

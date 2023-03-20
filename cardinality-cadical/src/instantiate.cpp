@@ -203,7 +203,7 @@ void Internal::instantiate (Instantiator & instantiator) {
   init_watches ();
   connect_watches ();
   if (propagated < trail.size ()) {
-    if (!propagate ()) {
+    if (!CARpropagate ()) {
       LOG ("propagation after connecting watches failed");
       learn_empty_clause ();
       assert (unsat);

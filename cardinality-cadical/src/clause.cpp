@@ -68,6 +68,81 @@ void Internal::mark_added (Clause * c) {
 
 /*------------------------------------------------------------------------*/
 
+Clause * Internal::CARnew_clause (bool red, int glue) {
+
+  assert (clause.size () <= (size_t) INT_MAX);
+  const int size = (int) clause.size ();
+  assert (size >= 2);
+
+  if (glue > size) glue = size;
+
+  // Determine whether this clauses should be kept all the time.
+  //
+  bool keep;
+  if (!red) keep = true;
+  else if (glue <= opts.reducetier1glue) keep = true;
+  else keep = false;
+
+  size_t bytes = Clause::bytes (size);
+  Clause * c = (Clause *) new char[bytes];
+
+  stats.added.total++;
+#ifdef LOGGING
+  c->id = stats.added.total;
+#endif
+
+  c->conditioned = false;
+  c->covered = false;
+  c->enqueued = false;
+  c->frozen = false;
+  c->garbage = false;
+  c->gate = false;
+  c->hyper = false;
+  c->instantiated = false;
+  c->keep = keep;
+  c->moved = false;
+  c->reason = false;
+  c->redundant = red;
+  c->transred = false;
+  c->subsume = false;
+  c->vivified = false;
+  c->vivify = false;
+  c->used = 0;
+  c->cardinality_clause = true;
+
+  c->glue = glue;
+  c->size = size;
+  c->pos = original_cardinality + 1;
+
+  c->unwatched = original_cardinality + 1;
+
+  for (int i = 0; i < size; i++) c->literals[i] = clause[i];
+
+  // Just checking that we did not mess up our sophisticated memory layout.
+  // This might be compiler dependent though. Crucial for correctness.
+  //
+  assert (c->bytes () == bytes);
+
+  stats.current.total++;
+  stats.added.total++;
+
+  if (red) {
+    stats.current.redundant++;
+    stats.added.redundant++;
+  } else {
+    stats.irrbytes += bytes;
+    stats.current.irredundant++;
+    stats.added.irredundant++;
+  }
+
+  CARclauses.push_back (c);
+  LOG (c, "new pointer %p", (void*) c);
+
+  if (likely_to_be_kept_clause (c)) mark_added (c);
+
+  return c;
+}
+
 Clause * Internal::new_clause (bool red, int glue) {
 
   assert (clause.size () <= (size_t) INT_MAX);
@@ -108,10 +183,13 @@ Clause * Internal::new_clause (bool red, int glue) {
   c->vivified = false;
   c->vivify = false;
   c->used = 0;
+  c->cardinality_clause = false;
 
   c->glue = glue;
   c->size = size;
   c->pos = 2;
+
+  c->unwatched = 2;
 
   for (int i = 0; i < size; i++) c->literals[i] = clause[i];
 
@@ -306,9 +384,92 @@ void Internal::assign_original_unit (int lit) {
   trail.push_back (lit);
   LOG ("original unit assign %d", lit);
   mark_fixed (lit);
-  if (propagate ()) return;
+  if (CARpropagate ()) return;
   LOG ("propagation of original unit results in conflict");
   learn_empty_clause ();
+}
+
+// New cardinality clause added through the API, e.g., while parsing a DIMACS file.
+//
+void Internal::CARadd_new_original_clause () {
+  if (level) backtrack ();
+  LOG (original, "original clause");
+  bool skip = false;
+  int satisfied_literals = 0;
+  if (unsat) {
+    LOG ("skipping clause since formula already inconsistent");
+    skip = true;
+  } else {
+    assert (clause.empty ());
+    for (const auto & lit : original) {
+      int tmp = marked (lit);
+      if (tmp > 0) {
+        LOG ("removing duplicated literal %d", lit);
+      // } else if (tmp < 0) {
+      //   LOG ("tautological since both %d and %d occur", -lit, lit);
+      //   skip = true;
+      } else {
+        mark (lit);
+        tmp = val (lit);
+        if (tmp < 0) {
+          LOG ("removing falsified literal %d", lit);
+        } else if (tmp > 0) {
+          LOG ("satisfied literal %d", lit);
+          // skip = true;
+          satisfied_literals++;
+        } else {
+          clause.push_back (lit);
+          assert (flags (lit).status != Flags::UNUSED);
+        }
+      }
+    }
+    for (const auto & lit : original)
+      unmark (lit);
+  }
+  if (!skip) {
+    original_cardinality =  original_cardinality - satisfied_literals;
+  //   if (proof) proof->delete_clause (original);
+  // } else {
+    size_t size = clause.size ();
+    if (original_cardinality <= 0) { // clause is satisfied
+      VERBOSE (1, "found satisfied original clause");
+    }
+    else if (!size || size < (unsigned long) original_cardinality) {
+      if (!unsat) {
+        if (!original.size ()) VERBOSE (1, "found empty original clause");
+        else MSG ("found falsified original clause");
+        unsat = true;
+      }
+    } else if (size == (unsigned long) original_cardinality) { // every literal must be true to meet cardinality constraint
+      VERBOSE (1, "propagating original clause");
+      for (const auto & lit : original)
+        {
+          if (!vals[lit])
+            assign_original_unit (lit);
+        }
+    } else {
+      if (original_cardinality == 1) {
+        Clause * c = new_clause (false);
+        watch_clause (c);
+      } else {
+        Clause * c = CARnew_clause (false);
+        CARwatch_clause (c, original_cardinality);
+      }
+    }
+  }
+
+  // If we have reduced size of constaint, that will be propagated in the proof by the units
+
+  // if (original.size () > size) {
+  //   external->check_learned_clause ();
+  //   if (proof) {
+  //     proof->add_derived_clause (clause);
+  //     proof->delete_clause (original);
+  //   }
+  // }
+  // }
+
+  clause.clear ();
 }
 
 // New clause added through the API, e.g., while parsing a DIMACS file.

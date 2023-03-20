@@ -223,17 +223,48 @@ namespace CaDiCaL {
       {
         const Clause &c = *v.reason;
         LOG(v.reason, "resolving with reason");
-        for(int lit : c) {
-          if(lit == uip)
-            continue;
-          assert(val(lit) < 0);
-          int tmp = shrink_literal(lit, blevel, max_trail);
-          if(tmp < 0) {
-            failed_ptr = true;
-            break;
+        if (v.reason->unwatched > 2) {
+          Clause *reason = v.reason;
+          for (int k = reason->unwatched; k < reason->size; k++) {
+            assert (val (reason->literals[k]) < 0);
+            int lit = reason->literals[k];
+            if(lit == uip)
+              continue;
+            int tmp = shrink_literal(lit, blevel, max_trail);
+            if(tmp < 0) {
+              failed_ptr = true;
+              break;
+            }
+            if(tmp > 0) {
+              ++open;
+            }
           }
-          if(tmp > 0) {
-            ++open;
+          assert (val (reason->reason_literal) < 0);
+          int lit = reason->reason_literal;
+          if (!failed_ptr && lit != uip) {
+            int tmp = shrink_literal(lit, blevel, max_trail);
+            if(tmp < 0) {
+              failed_ptr = true;
+            }
+            if(tmp > 0) {
+              ++open;
+            }
+          }
+        }
+        else {
+          for(int lit : c) {
+            if(lit == uip)
+              continue;
+            // if (val (lit) > 0) continue;
+            assert(val(lit) < 0);
+            int tmp = shrink_literal(lit, blevel, max_trail);
+            if(tmp < 0) {
+              failed_ptr = true;
+              break;
+            }
+            if(tmp > 0) {
+              ++open;
+            }
           }
         }
       }

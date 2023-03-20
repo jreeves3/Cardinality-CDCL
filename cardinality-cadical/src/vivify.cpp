@@ -86,6 +86,13 @@ bool Internal::vivify_propagate () {
   assert (!unsat);
   START (propagate);
   int64_t before = propagated2 = propagated;
+
+  int64_t car_missed_propagated_literals = 0;
+  int64_t car_propagated_literals = 0;
+  int64_t car_propagation = 0; 
+  int64_t car_conflict = 0;
+
+  cardinality_conflict_literal = 0; // assigned if cardinality constraint is conflict
   for (;;) {
     if (propagated2 != trail.size ()) {
       const int lit = -trail[propagated2++];
@@ -93,10 +100,10 @@ bool Internal::vivify_propagate () {
       Watches & ws = watches (lit);
       for (const auto & w : ws) {
         if (!w.binary ()) continue;
-        const signed char b = val (w.blit);
+        const signed char b = (!w.cardinality_clause()) ? val (w.get_blit()) : 0;
         if (b > 0) continue;
         if (b < 0) conflict = w.clause;                 // but continue
-        else vivify_assign (w.blit, w.clause);
+        else vivify_assign (w.get_blit(), w.clause);
       }
     } else if (!conflict && propagated != trail.size ()) {
       const int lit = -trail[propagated++];
@@ -108,46 +115,136 @@ bool Internal::vivify_propagate () {
       while (i != eow) {
         const Watch w = *j++ = *i++;
         if (w.binary ()) continue;
-        if (val (w.blit) > 0) continue;
+         
+        // blit = 0 for cardinality constraints >= 2
+        const signed char b = (!w.cardinality_clause()) ? val (w.get_blit()) : 0;
+        if (b > 0) continue;                // blocking literal satisfied
+
         if (w.clause->garbage) { j--; continue; }
         if (w.clause == ignore) continue;
-        literal_iterator lits = w.clause->begin ();
-        const int other = lits[0]^lits[1]^lit;
-        const signed char u = val (other);
-        if (u > 0) j[-1].blit = other;
-        else {
-          const int size = w.clause->size;
-          const const_literal_iterator end = lits + size;
-          const literal_iterator middle = lits + w.clause->pos;
-          literal_iterator k = middle;
-          signed char v = -1;
-          int r = 0;
-          while (k != end && (v = val (r = *k)) < 0)
-            k++;
-          if (v < 0) {
-            k = lits + 2;
-            assert (w.clause->pos <= size);
-            while (k != middle && (v = val (r = *k)) < 0)
+
+        if (!w.cardinality_clause()) { // normal clause
+
+          literal_iterator lits = w.clause->begin ();
+          const int other = lits[0]^lits[1]^lit;
+          const signed char u = val (other);
+          if (u > 0) j[-1].set_blit(other);
+          else {
+            const int size = w.clause->size;
+            const const_literal_iterator end = lits + size;
+            const literal_iterator middle = lits + w.clause->pos;
+            literal_iterator k = middle;
+            signed char v = -1;
+            int r = 0;
+            while (k != end && (v = val (r = *k)) < 0)
               k++;
+            if (v < 0) {
+              k = lits + 2;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+            w.clause->pos = k - lits;
+            assert (lits + 2 <= k), assert (k <= w.clause->end ());
+            if (v > 0) j[-1].set_blit(r);
+            else if (!v) {
+              LOG (w.clause, "unwatch %d in", r);
+              lits[0] = other;
+              lits[1] = r;
+              *k = lit;
+              watch_literal (r, lit, w.clause);
+              j--;
+            } else if (!u) {
+              assert (v < 0);
+              vivify_assign (other, w.clause);
+            } else {
+              assert (u < 0);
+              assert (v < 0);
+              conflict = w.clause;
+              break;
+            }
           }
-          w.clause->pos = k - lits;
-          assert (lits + 2 <= k), assert (k <= w.clause->end ());
-          if (v > 0) j[-1].blit = r;
-          else if (!v) {
-            LOG (w.clause, "unwatch %d in", r);
-            lits[0] = other;
-            lits[1] = r;
+        } else { // cardinality clause
+          literal_iterator lits = w.clause->begin ();
+
+          const int unwatched = w.clause->unwatched;
+
+          const int size = w.clause->size;
+          const literal_iterator middle = lits + w.clause->pos;
+          const const_literal_iterator end = lits + size;
+          literal_iterator k = middle;
+
+          // Find replacement watch 'r' at position 'k' with value 'v'.
+
+          int r = 0;
+          signed char v = -1;
+          if (size > unwatched) { // at least 1 unwatched literal
+
+            while (k != end && (v = val (r = *k)) < 0)
+              k++;
+
+            if (v < 0) {  // need second search starting at the head?
+
+              k = lits + unwatched;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+
+            w.clause->pos = k - lits;  // always save position
+
+            assert (lits + unwatched <= k), assert (k <= w.clause->end ());
+          } //else every literal is watched, no replacement possible
+
+
+          if (v >= 0) { // Replacement satisfied or unassigned, simple swap
+
+            assert (k-lits >= unwatched); // k is not watched currently
+
+            int my_lit_pos = w.get_blit();
+
+            // swap position
+            lits[my_lit_pos] = r;
             *k = lit;
-            watch_literal (r, lit, w.clause);
-            j--;
-          } else if (!u) {
-            assert (v < 0);
-            vivify_assign (other, w.clause);
+            
+            // watch new literal at position my_lit_pos
+            CARwatch_literal (r, my_lit_pos, w.clause);
+            j--;  // Drop this watch from the watch list of 'lit'.
+            LOG (w.clause, "unwatch %d in", lit);
+
           } else {
-            assert (u < 0);
-            assert (v < 0);
-            conflict = w.clause;
-            break;
+
+            // check if we can propagate all unassigned watched literals
+            // i.e., no other watched literal falsified
+
+            for (int i = 0; i < unwatched; i++) {
+              if (lits[i] != lit && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
+            }
+
+            if (!cardinality_conflict_literal) { // propagate all other watches
+              
+              for (int i = 0; i < unwatched; i++) { 
+                if (lits[i] != lit) assert (val (lits[i]) >= 0);
+                if (val (lits[i]) == 0) {
+                  car_propagated_literals++;
+                  vivify_assign (lits[i], w.clause);
+                } else { if (lits[i] != lit) car_missed_propagated_literals++;}
+              }
+
+              w.clause->reason_literal = lit; // update reason for propagation
+
+              car_propagation++; // increment propagation count
+            } else { //  conflict
+              // More than one watch assigned to false, breaking cardinality constraint
+
+              conflict = w.clause;
+
+              w.clause->reason_literal = lit; // update reason for propagation
+              car_conflict++;
+
+              break;
+
+            }
           }
         }
       }
@@ -371,16 +468,37 @@ void Internal::vivify_analyze_redundant (Vivifier & vivifier,
     if (c->size > 2) only_binary_reasons = false;
     stack.pop_back ();
     LOG (c, "vivify analyze");
-    for (const auto & lit : *c) {
-      Var & v = var (lit);
-      if (!v.level) continue;
-      Flags & f = flags (lit);
-      if (f.seen) continue;
-      assert (val (lit) < 0);
-      f.seen = true;
-      analyzed.push_back (lit);
-      if (v.reason) stack.push_back (v.reason);
-      else LOG ("vivify seen %d", lit);
+    if (c->unwatched == 2) { // normal clause
+      for (const auto & lit : *c) {
+        Var & v = var (lit);
+        if (!v.level) continue;
+        Flags & f = flags (lit);
+        if (f.seen) continue;
+        assert (val (lit) < 0);
+        f.seen = true;
+        analyzed.push_back (lit);
+        if (v.reason) stack.push_back (v.reason);
+        else LOG ("vivify seen %d", lit);
+      }
+    } else { // cardinality clause
+      vector<int> card_literals; // reason literals
+      for (int k = c->unwatched; k < c->size; k++) card_literals.push_back(c->literals[k]);
+      card_literals.push_back(c->reason_literal);
+      if (cardinality_conflict_literal) { // if conflict, two watched literals offending
+        card_literals.push_back(cardinality_conflict_literal);
+        cardinality_conflict_literal = 0;
+      }
+      for (const auto & lit : card_literals) {
+        Var & v = var (lit);
+        if (!v.level) continue;
+        Flags & f = flags (lit);
+        if (f.seen) continue;
+        assert (val (lit) < 0);
+        f.seen = true;
+        analyzed.push_back (lit);
+        if (v.reason) stack.push_back (v.reason);
+        else LOG ("vivify seen %d", lit);
+      }
     }
   }
 
@@ -491,8 +609,11 @@ void Internal::vivify_strengthen (Clause * c) {
     assign_unit (unit);
     stats.vivifyunits++;
 
-    bool ok = propagate ();
-    if (!ok) learn_empty_clause ();
+    bool ok = CARpropagate ();
+    if (!ok) {
+      printf("Learned on line 614\n");
+      learn_empty_clause ();
+    }
 
   } else {
 
@@ -968,8 +1089,9 @@ void Internal::vivify_round (bool redundant_mode, int64_t propagation_limit) {
 
   connect_watches (!redundant_mode);       // watch all relevant clauses
 
-  if (!unsat && !propagate ()) {
+  if (!unsat && !CARpropagate ()) {
     LOG ("propagation after connecting watches in inconsistency");
+    printf("propagation after connecting watches in inconsistency\n");
     learn_empty_clause ();
   }
 
@@ -1024,8 +1146,9 @@ void Internal::vivify_round (bool redundant_mode, int64_t propagation_limit) {
     //
     propagated2 = propagated = 0;
 
-    if (!propagate ()) {
+    if (!CARpropagate ()) {
       LOG ("propagating vivified units leads to conflict");
+      printf("propagating vivified units leads to conflict\n");
       learn_empty_clause ();
     }
   }

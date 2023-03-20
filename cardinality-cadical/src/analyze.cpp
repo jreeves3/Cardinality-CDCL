@@ -245,6 +245,42 @@ Internal::analyze_literal (int lit, int & open) {
 }
 
 inline void
+Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
+  assert (reason);
+  if (reason->unwatched == 2) { // normal clause
+    bump_clause (reason);
+    for (const auto & other : *reason)
+      if (other != lit)
+        analyze_literal (other, open);
+  } else { // cardinality constraint
+    LOG (reason, "Analyzing");
+
+    for (int k = reason->unwatched; k < reason->size; k++) {
+      assert (val (reason->literals[k]) < 0 && reason->literals[k] != lit);
+      analyze_literal (reason->literals[k], open);
+      LOG ("Analyzing %d", reason->literals[k]);
+      if (opts.ccdclBump && use_scores ()) {
+        bump_variable (reason->literals[k]);
+        bump_variable (reason->literals[k]);
+      }
+    }
+    assert (val (reason->reason_literal) < 0 && reason->reason_literal != lit);
+    analyze_literal (reason->reason_literal, open);
+    LOG ("Analyzing %d", reason->reason_literal);
+    if (opts.ccdclBump && use_scores ()) {
+        bump_variable (reason->reason_literal);
+        bump_variable (reason->reason_literal);
+      }
+    if (cardinality_conflict_literal) {
+      assert (val (cardinality_conflict_literal) < 0 && reason->reason_literal != lit);
+      analyze_literal (cardinality_conflict_literal, open);
+      cardinality_conflict_literal = 0;
+    }
+    
+  }
+}
+
+inline void
 Internal::analyze_reason (int lit, Clause * reason, int & open) {
   assert (reason);
   bump_clause (reason);
@@ -285,6 +321,7 @@ inline void Internal::bump_also_reason_literals (int lit, int limit) {
   assert (lit);
   assert (limit > 0);
   const Var & v = var (lit);
+  if (val (lit) > 0) return;// CAR
   assert (val (lit));
   if (!v.level) return;
   Clause * reason = v.reason;
@@ -600,11 +637,153 @@ void Internal::eagerly_subsume_recently_learned_clauses (Clause * c) {
 // This is the main conflict analysis routine.  It assumes that a conflict
 // was found.  Then we derive the 1st UIP clause, optionally minimize it,
 // add it as learned clause, and then uses the clause for conflict directed
+// back-jumping and flipping the 1st UIP literal.
+
+void Internal::CARanalyze () {
+
+  START (analyze);
+
+  assert (conflict);
+
+  // First update moving averages of trail height at conflict.
+  //
+  UPDATE_AVERAGE (averages.current.trail.fast, trail.size ());
+  UPDATE_AVERAGE (averages.current.trail.slow, trail.size ());
+
+  // no chronological backtracking... for now
+
+  // Actual conflict on root level, thus formula unsatisfiable.
+  //
+  if (!level) {
+    learn_empty_clause ();
+    if (external->learner) external->export_learned_empty_clause ();
+    STOP (analyze);
+    return;
+  }
+
+  /*----------------------------------------------------------------------*/
+
+  // First derive the 1st UIP clause by going over literals assigned on the
+  // current decision level.  Literals in the conflict are marked as 'seen'
+  // as well as all literals in reason clauses of already 'seen' literals on
+  // the current decision level.  Thus the outer loop starts with the
+  // conflict clause as 'reason' and then uses the 'reason' of the next
+  // seen literal on the trail assigned on the current decision level.
+  // During this process maintain the number 'open' of seen literals on the
+  // current decision level with not yet processed 'reason'.  As soon 'open'
+  // drops to one, we have found the first unique implication point.  This
+  // is sound because the topological order in which literals are processed
+  // follows the assignment order and a more complex algorithm to find
+  // articulation points is not necessary.
+  //
+  Clause * reason = conflict;
+  LOG (reason, "analyzing conflict");
+
+  assert (clause.empty ());
+
+  int i = trail.size ();        // Start at end-of-trail.
+  int open = 0;                 // Seen but not processed on this level.
+  int uip = 0;                  // The first UIP literal.
+
+  for (;;) {
+    CARanalyze_reason (uip, reason, open);
+    uip = 0;
+    while (!uip) {
+      assert (i > 0);
+      const int lit = trail[--i];
+      if (!flags (lit).seen) continue;
+      if (var (lit).level == level) uip = lit;
+    }
+    if (!--open) break;
+    reason = var (uip).reason;
+    LOG (reason, "analyzing %d reason", uip);
+  }
+  LOG ("first UIP %d", uip);
+  clause.push_back (-uip);
+
+  // Update glue and learned (1st UIP literals) statistics.
+  //
+  int size = (int) clause.size ();
+  const int glue = (int) levels.size () - 1;
+  LOG (clause, "1st UIP size %d and glue %d clause", size, glue);
+  UPDATE_AVERAGE (averages.current.glue.fast, glue);
+  UPDATE_AVERAGE (averages.current.glue.slow, glue);
+  stats.learned.literals += size;
+  stats.learned.clauses++;
+  assert (glue < size);
+
+
+
+
+  // Adding back shrinking and mimizing
+  if (size > 1) {
+    if (opts.shrink)
+      shrink_and_minimize_clause();
+    else if (opts.minimize)
+      minimize_clause();
+
+    size = (int) clause.size ();
+
+    // Update decision heuristics.
+    //
+    if (opts.bump)
+      bump_variables();
+
+    if (external->learner) external->export_learned_large_clause (clause);
+  } else if (external->learner)
+    external->export_learned_unit_clause(-uip);
+
+  // Update actual size statistics.
+  //
+  stats.units    += (size == 1);
+  stats.binaries += (size == 2);
+  UPDATE_AVERAGE (averages.current.size, size);
+
+  // Determine back-jump level, learn driving clause, backtrack and assign
+  // flipped 1st UIP literal.
+  //
+  int jump;
+  Clause * driving_clause = new_driving_clause (glue, jump);
+  UPDATE_AVERAGE (averages.current.jump, jump);
+
+  int new_level = determine_actual_backtrack_level (jump);;
+  UPDATE_AVERAGE (averages.current.level, new_level);
+  backtrack (new_level);
+
+  if (uip) search_assign_driving (-uip, driving_clause);
+  else learn_empty_clause ();
+
+  if (stable) reluctant.tick (); // Reluctant has its own 'conflict' counter.
+
+  // Clean up.
+  //
+  clear_analyzed_literals ();
+  clear_analyzed_levels ();
+  clause.clear ();
+  
+
+  STOP (analyze);
+
+  conflict = 0;
+
+  if (driving_clause && opts.eagersubsume)
+    eagerly_subsume_recently_learned_clauses (driving_clause);
+}
+
+/*------------------------------------------------------------------------*/
+
+// This is the main conflict analysis routine.  It assumes that a conflict
+// was found.  Then we derive the 1st UIP clause, optionally minimize it,
+// add it as learned clause, and then uses the clause for conflict directed
 // back-jumping and flipping the 1st UIP literal.  In combination with
 // chronological backtracking (see discussion above) the algorithm becomes
 // slightly more involved.
 
 void Internal::analyze () {
+
+  VERBOSE (1, "Original analyze");
+  LOG ("Original analyze");
+  exit (1);
 
   START (analyze);
 

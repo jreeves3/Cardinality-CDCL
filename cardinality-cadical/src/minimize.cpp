@@ -29,10 +29,21 @@ bool Internal::minimize_literal (int lit, int depth) {
   assert (v.reason);
   const const_literal_iterator end = v.reason->end ();
   const_literal_iterator i;
-  for (i = v.reason->begin (); res && i != end; i++) {
-    const int other = *i;
-    if (other == lit) continue;
-    res = minimize_literal (-other, depth + 1);
+
+  if (v.reason->unwatched > 2) {
+    Clause *reason = v.reason;
+    for (int k = reason->unwatched; res && k < reason->size; k++) {
+      assert (val (reason->literals[k]) < 0 && reason->literals[k] != lit);
+      res = minimize_literal (-reason->literals[k], depth + 1);
+    }
+    assert (val (reason->reason_literal) < 0 && reason->reason_literal != lit);
+    if (res) res = minimize_literal (-reason->reason_literal, depth + 1);
+  } else {
+    for (i = v.reason->begin (); res && i != end; i++) {
+      const int other = *i;
+      if (other == lit) continue;
+      res = minimize_literal (-other, depth + 1);
+    }
   }
   if (res) f.removable = true; else f.poison = true;
   minimized.push_back (lit);

@@ -233,6 +233,13 @@ struct Internal {
   const Sange lits;             // Provides safe literal iteration.
 
   /*----------------------------------------------------------------------*/
+  // CCDCL 
+  int original_cardinality;
+  int cardinality_conflict_literal;
+  vector<Clause*> CARclauses;      // ordered collection of all original cardinality clauses
+
+
+  /*----------------------------------------------------------------------*/
 
   Internal ();
   ~Internal ();
@@ -250,6 +257,7 @@ struct Internal {
 
   void init_scores (int old_max_var, int new_max_var);
 
+  void CARadd_original_lit (int lit);
   void add_original_lit (int lit);
 
   // Enlarge tables.
@@ -446,8 +454,44 @@ struct Internal {
   inline void watch_literal (int lit, int blit, Clause * c) {
     assert (lit != blit);
     Watches & ws = watches (lit);
-    ws.push_back (Watch (blit, c));
+    ws.push_back (Watch (blit, c, 0));
     LOG (c, "watch %d blit %d in", lit, blit);
+  }
+
+  inline bool CARcheck_watch (int lit, Clause * c) {
+    Watches & ws = watches (lit);
+
+    const auto end = ws.end ();
+    auto i = ws.begin ();
+    for (auto j = i; j != end; j++) {
+      const Watch & w = *j;
+      if (w.clause == c) return true;
+    }
+    return false;
+  }
+
+
+  inline void CARwatch_literal (int lit, int blit, Clause * c) {
+    assert (blit < c->size && blit >= 0);
+    Watches & ws = watches (lit);
+    ws.push_back (Watch (blit, c, 1));
+    LOG (c, "watch %d blit %d in", lit, blit);
+  }
+
+  inline void CARwatch_clause (Clause * c, int cardinality) {
+    assert(cardinality < c->size);
+
+    if (cardinality == 1) { // normal clause, blocking literal used
+      const int l0 = c->literals[0];
+      const int l1 = c->literals[1];
+      watch_literal (l0, l1, c);
+      watch_literal (l1, l0, c);
+    } else { // cardinality+1 watches
+      for (int i = 0; i < cardinality+1; i++) {
+        int l1 = c->literals[i];
+        CARwatch_literal (l1, i, c);
+      }
+    }
   }
 
   // Add two watches to a clause.  This is used initially during allocation
@@ -494,6 +538,7 @@ struct Internal {
   // Managing clauses in 'clause.cpp'.  Without explicit 'Clause' argument
   // these functions work on the global temporary 'clause'.
   //
+  Clause * CARnew_clause (bool red, int glue = 0);
   Clause * new_clause (bool red, int glue = 0);
   void promote_clause (Clause *, int new_glue);
   size_t shrink_clause (Clause *, int new_size);
@@ -516,6 +561,7 @@ struct Internal {
   void delete_clause (Clause *);
   void mark_garbage (Clause *);
   void assign_original_unit (int);
+  void CARadd_new_original_clause ();
   void add_new_original_clause ();
   Clause * new_learned_redundant_clause (int glue);
   Clause * new_hyper_binary_resolved_clause (bool red, int glue);
@@ -529,6 +575,7 @@ struct Internal {
   void search_assign_driving (int lit, Clause * reason);
   void search_assume_decision (int decision);
   void assign_unit (int lit);
+  bool CARpropagate ();
   bool propagate ();
 
   // Undo and restart in 'backtrack.cpp'.
@@ -557,10 +604,12 @@ struct Internal {
   void bump_also_reason_literals (int lit, int limit);
   void bump_also_all_reason_literals ();
   void analyze_literal (int lit, int & open);
+  void CARanalyze_reason (int lit, Clause *, int & open);
   void analyze_reason (int lit, Clause *, int & open);
   Clause * new_driving_clause (const int glue, int & jump);
   int find_conflict_level (int & forced);
   int determine_actual_backtrack_level (int jump);
+  void CARanalyze ();
   void analyze ();
   void iterate ();       // report learned unit clause
 
@@ -660,6 +709,7 @@ struct Internal {
   //
   void init_watches ();
   void connect_watches (bool irredundant_only = false);
+  void connect_vivify_watches(bool irredundant_only = false);
   void sort_watches ();
   void clear_watches ();
   void reset_watches ();

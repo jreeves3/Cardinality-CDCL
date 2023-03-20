@@ -131,6 +131,23 @@ int External::internalize (int elit) {
   return ilit;
 }
 
+void External::CARadd (int elit) {
+  assert (elit != INT_MIN);
+  reset_extended ();
+  if (internal->opts.check &&
+      (internal->opts.checkwitness || internal->opts.checkfailed))
+    original.push_back (elit);
+  if (!internal->original_cardinality) {
+    LOG ("adding cardinality %d for next clause", elit);
+    internal->CARadd_original_lit (elit);
+  } else {
+    const int ilit = internalize (elit);
+    assert (!elit == !ilit);
+    if (elit) LOG ("adding external %d as internal %d", elit, ilit);
+    internal->CARadd_original_lit (ilit);
+  }
+}
+
 void External::add (int elit) {
   assert (elit != INT_MIN);
   reset_extended ();

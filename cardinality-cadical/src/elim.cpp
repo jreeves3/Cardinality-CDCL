@@ -827,7 +827,7 @@ void Internal::elim (bool update_limits) {
 
   if (unsat) return;
   if (level) backtrack ();
-  if (!propagate ()) { learn_empty_clause (); return; }
+  if (!CARpropagate ()) { learn_empty_clause (); return; }
 
   stats.elimphases++;
   PHASE ("elim-phase", stats.elimphases,
@@ -927,7 +927,7 @@ void Internal::elim (bool update_limits) {
   else if (propagated < trail.size ()) {
     LOG ("elimination produced %zd units",
       (size_t)(trail.size () - propagated));
-    if (!propagate ()) {
+    if (!CARpropagate ()) {
       LOG ("propagating units after elimination results in empty clause");
       learn_empty_clause ();
     }

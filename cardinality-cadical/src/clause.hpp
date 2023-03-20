@@ -44,6 +44,7 @@ struct Clause {
   unsigned used:2;    // resolved in conflict analysis since last 'reduce'
   bool vivified:1;    // clause already vivified
   bool vivify:1;      // clause scheduled to be vivified
+  bool cardinality_clause:1;
 
   // The glucose level ('LBD' or short 'glue') is a heuristic value for the
   // expected usefulness of a learned clause, where smaller glue is consider
@@ -83,6 +84,9 @@ struct Clause {
 
   int size;         // Actual size of 'literals' (at least 2).
   int pos;          // Position of last watch replacement [Gent'13].
+
+  int unwatched;    // Position of first unwatched literal (may be = size if all literals watched)
+  int reason_literal; // Falsified watched literal used in reason
 
   union {
 

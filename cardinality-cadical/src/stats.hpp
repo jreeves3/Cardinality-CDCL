@@ -26,6 +26,11 @@ struct Stats {
     int64_t walk;       // propagated during local search
   } propagations;
 
+  int64_t car_conflict; 
+  int64_t car_propagation;  
+  int64_t car_propagated_literals;   
+  int64_t car_missed_propagated_literals;  
+
   int64_t condassinit;  // initial assigned literals
   int64_t condassirem;  // initial assigned literals for blocked
   int64_t condassrem;   // remaining assigned literals for blocked

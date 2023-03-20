@@ -233,10 +233,10 @@ inline void Internal::probe_propagate2 () {
     Watches & ws = watches (lit);
     for (const auto & w : ws) {
       if (!w.binary ()) continue;
-      const signed char b = val (w.blit);
+      const signed char b = (!w.cardinality_clause()) ? val (w.get_blit()) : 0;
       if (b > 0) continue;
       if (b < 0) conflict = w.clause;                   // but continue
-      else probe_assign (w.blit, -lit);
+      else probe_assign (w.get_blit(), -lit);
     }
   }
 }
@@ -246,6 +246,11 @@ bool Internal::probe_propagate () {
   assert (!unsat);
   START (propagate);
   int64_t before = propagated2 = propagated;
+  int64_t car_missed_propagated_literals = 0;
+  int64_t car_propagated_literals = 0;
+  int64_t car_propagation = 0; 
+  int64_t car_conflict = 0;
+  cardinality_conflict_literal = 0; // assigned if cardinality constraint is conflict
   while (!conflict) {
     if (propagated2 != trail.size ()) probe_propagate2 ();
     else if (propagated != trail.size ()) {
@@ -256,47 +261,153 @@ bool Internal::probe_propagate () {
       while (i != ws.size ()) {
         const Watch w = ws[j++] = ws[i++];
         if (w.binary ()) continue;
-        const signed char b = val (w.blit);
+        const signed char b = (!w.cardinality_clause()) ? val (w.get_blit()) : 0;
         if (b > 0) continue;
         if (w.clause->garbage) continue;
-        const literal_iterator lits = w.clause->begin ();
-        const int other = lits[0]^lits[1]^lit;
-        //lits[0] = other, lits[1] = lit;
-        const signed char u = val (other);
-        if (u > 0) ws[j-1].blit = other;
-        else {
+        if (!w.cardinality_clause()) { // normal clause
+          const literal_iterator lits = w.clause->begin ();
+          const int other = lits[0]^lits[1]^lit;
+          //lits[0] = other, lits[1] = lit;
+          const signed char u = val (other);
+          if (u > 0) ws[j-1].set_blit(other);
+          else {
+            const int size = w.clause->size;
+            const const_literal_iterator end = lits + size;
+            const literal_iterator middle = lits + w.clause->pos;
+            literal_iterator k = middle;
+            int r = 0;
+            signed char v = -1;
+            while (k != end && (v = val (r = *k)) < 0)
+              k++;
+            if (v < 0) {
+              k = lits + 2;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+            w.clause->pos = k - lits;
+            assert (lits + 2 <= k), assert (k <= w.clause->end ());
+            if (v > 0) ws[j-1].set_blit(r);
+            else if (!v) {
+              LOG (w.clause, "unwatch %d in", r);
+              *k = lit;
+              lits[0] = other;
+              lits[1] = r;
+              watch_literal (r, lit, w.clause);
+              j--;
+            } else if (!u) {
+              if (level == 1) {
+                lits[0] = other, lits[1] = lit;
+                int dom = hyper_binary_resolve (w.clause);
+                probe_assign (other, dom);
+              } else probe_assign_unit (other);
+              probe_propagate2 ();
+            } else conflict = w.clause;
+          }
+        } else { // cardinality constraint
+          LOG ("Probe: Propagating Cardinality Constraint");
+
+          literal_iterator lits = w.clause->begin ();
+
+          const int unwatched = w.clause->unwatched;
+
           const int size = w.clause->size;
-          const const_literal_iterator end = lits + size;
           const literal_iterator middle = lits + w.clause->pos;
+          const const_literal_iterator end = lits + size;
           literal_iterator k = middle;
+
+          // Find replacement watch 'r' at position 'k' with value 'v'.
+
           int r = 0;
           signed char v = -1;
-          while (k != end && (v = val (r = *k)) < 0)
-            k++;
-          if (v < 0) {
-            k = lits + 2;
-            assert (w.clause->pos <= size);
-            while (k != middle && (v = val (r = *k)) < 0)
+          if (size > unwatched) { // at least 1 unwatched literal
+
+            while (k != end && (v = val (r = *k)) < 0)
               k++;
-          }
-          w.clause->pos = k - lits;
-          assert (lits + 2 <= k), assert (k <= w.clause->end ());
-          if (v > 0) ws[j-1].blit = r;
-          else if (!v) {
-            LOG (w.clause, "unwatch %d in", r);
+
+            if (v < 0) {  // need second search starting at the head?
+
+              k = lits + unwatched;
+              assert (w.clause->pos <= size);
+              while (k != middle && (v = val (r = *k)) < 0)
+                k++;
+            }
+
+            w.clause->pos = k - lits;  // always save position
+
+            assert (lits + unwatched <= k), assert (k <= w.clause->end ());
+          } //else every literal is watched, no replacement possible
+
+
+          if (v >= 0) { // Replacement satisfied or unassigned, simple swap
+
+            assert (k-lits >= unwatched); // k is not watched currently
+
+            int my_lit_pos = w.get_blit();
+
+            // swap position
+            lits[my_lit_pos] = r;
             *k = lit;
-            lits[0] = other;
-            lits[1] = r;
-            watch_literal (r, lit, w.clause);
-            j--;
-          } else if (!u) {
-            if (level == 1) {
-              lits[0] = other, lits[1] = lit;
-              int dom = hyper_binary_resolve (w.clause);
-              probe_assign (other, dom);
-            } else probe_assign_unit (other);
-            probe_propagate2 ();
-          } else conflict = w.clause;
+            
+            // watch new literal at position my_lit_pos
+            CARwatch_literal (r, my_lit_pos, w.clause);
+            j--;  // Drop this watch from the watch list of 'lit'.
+            LOG (w.clause, "unwatch %d in", lit);
+
+          } else {
+
+            // check if we can propagate all unassigned watched literals
+            // i.e., no other watched literal falsified
+
+            for (int i = 0; i < unwatched; i++) {
+              if (lits[i] != lit && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
+            }
+
+            if (!cardinality_conflict_literal) { // propagate all other watches
+              
+              LOG ("Probe: Propagating");
+              if (level == 1) { LOG ("Probe: Propagating Level 1");
+                vector<int> card_literals; // reason literals
+                for (int k = w.clause->unwatched; k < w.clause->size; k++) card_literals.push_back(w.clause->literals[k]);
+                int dom = -lit;
+                for (const auto & litP : card_literals) {
+                  const int other = litP;
+                  assert (val (other) > 0);
+                  if (!var (other).level) continue;
+                  dom = probe_dominator (dom, other);
+                }
+
+                for (int i = 0; i < unwatched; i++) { 
+                  if (lits[i] != lit) assert (val (lits[i]) >= 0);
+                  if (val (lits[i]) == 0) {
+                    car_propagated_literals++;
+                    probe_assign (lits[i], dom);
+                  } else { if (lits[i] != lit) car_missed_propagated_literals++;}
+                }
+              } else { LOG ("Probe: Propagating Level 0");
+                for (int i = 0; i < unwatched; i++) { 
+                  if (lits[i] != lit) assert (val (lits[i]) >= 0);
+                  if (val (lits[i]) == 0) {
+                    probe_assign_unit (lits[i]);
+                  } else { if (lits[i] != lit) car_missed_propagated_literals++;}
+                }
+              }
+
+              w.clause->reason_literal = lit; // update reason for propagation
+
+              car_propagation++; // increment propagation count
+            } else { //  conflict
+              // More than one watch assigned to false, breaking cardinality constraint
+              LOG ("Probe: Conflict");
+              conflict = w.clause;
+
+              w.clause->reason_literal = lit; // update reason for propagation
+              car_conflict++;
+
+              break;
+
+            }
+          }
         }
       }
       if (j != i) {
@@ -333,10 +444,25 @@ void Internal::failed_literal (int failed) {
   LOG (conflict, "analyzing failed literal conflict");
 
   int uip = 0;
-  for (const auto & lit : *conflict) {
-    const int other = -lit;
-    if (!var (other).level) continue;
-    uip = uip ? probe_dominator (uip, other) : other;
+  if (conflict->size == 2) { // normal clause
+    for (const auto & lit : *conflict) {
+      const int other = -lit;
+      if (!var (other).level) continue;
+      uip = uip ? probe_dominator (uip, other) : other;
+    } 
+  } else { // cardinality constraint
+      vector<int> card_literals; // reason literals
+      for (int k = conflict->unwatched; k < conflict->size; k++) card_literals.push_back(conflict->literals[k]);
+      card_literals.push_back(conflict->reason_literal);
+      if (cardinality_conflict_literal) { // if conflict, two watched literals offending
+        card_literals.push_back(cardinality_conflict_literal);
+        cardinality_conflict_literal = 0;
+      }
+      for (const auto & lit : card_literals) {
+        const int other = -lit;
+        if (!var (other).level) continue;
+        uip = uip ? probe_dominator (uip, other) : other;
+      }
   }
   LOG ("found probing UIP %d", uip);
   assert (uip);
@@ -601,7 +727,7 @@ bool Internal::probe_round () {
   if (unsat) LOG ("probing derived empty clause");
   else if (propagated < trail.size ()) {
     LOG ("probing produced %zd units", (size_t)(trail.size () - propagated));
-    if (!propagate ()) {
+    if (!CARpropagate ()) {
       LOG ("propagating units after probing results in empty clause");
       learn_empty_clause ();
     } else sort_watches ();
@@ -633,7 +759,7 @@ void CaDiCaL::Internal::probe (bool update_limits) {
 
   if (unsat) return;
   if (level) backtrack ();
-  if (!propagate ()) { learn_empty_clause (); return; }
+  if (!CARpropagate ()) { learn_empty_clause (); return; }
 
   stats.probingphases++;
 
@@ -641,21 +767,21 @@ void CaDiCaL::Internal::probe (bool update_limits) {
 
   // We trigger equivalent literal substitution (ELS) before ...
   //
-  decompose ();
+  // decompose ();
 
-  if (ternary ())       // If we derived a binary clause
-    decompose ();       // then start another round of ELS.
+  // if (ternary ())       // If we derived a binary clause
+  //   decompose ();       // then start another round of ELS.
 
   // Remove duplicated binary clauses and perform in essence hyper unary
   // resolution, i.e., derive the unit '2' from '1 2' and '-1 2'.
   //
-  mark_duplicated_binary_clauses_as_garbage ();
+  // mark_duplicated_binary_clauses_as_garbage ();
 
   for (int round = 1; round <= opts.proberounds; round++)
     if (!probe_round ())
       break;
 
-  decompose ();         // ... and (ELS) afterwards.
+  // decompose ();         // ... and (ELS) afterwards.
 
   last.probe.propagations = stats.propagations.search;
 

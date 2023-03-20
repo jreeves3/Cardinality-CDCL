@@ -350,7 +350,7 @@ bool Internal::ternary () {
   assert (!unsat);
   init_watches ();
   connect_watches ();
-  if (!propagate ()) {
+  if (!CARpropagate ()) {
     LOG ("propagation after connecting watches results in inconsistency");
     learn_empty_clause ();
   }

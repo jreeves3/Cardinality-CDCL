@@ -22,10 +22,19 @@ struct Watch {
   Clause * clause; int blit;
   int size;
 
-  Watch (int b, Clause * c) : clause (c), blit (b), size (c->size) { }
+  Watch (int b, Clause * c, int cardinality) : clause (c), blit (b), size (c->size) {
+    set_blit (b);
+    if (cardinality) set_cardinality ();
+   }
   Watch () { }
 
-  bool binary () const { return size == 2; }
+  bool binary () const { return size == 2  && (blit & 1) != 1; }
+  // bool cardinality_clause () const { return !blit; }
+
+  bool cardinality_clause () const { return (blit & 1) == 1; }
+  int get_blit () const {return blit >> 1;}
+  void set_blit (int blit_) {blit = blit_ << 1; if (blit & 1) blit ^= 1;}
+  void set_cardinality () {blit |= 1;}
 };
 
 typedef vector<Watch> Watches;          // of one literal

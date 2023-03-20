@@ -217,6 +217,8 @@ public:
   // Further note that 'lit' is required to be different from 'INT_MIN' and
   // different from '0' except for 'add'.
 
+ void CARadd (int lit);
+
   // Add valid literal to clause or zero to terminate clause.
   //
   //   require (VALID)                  // recall 'VALID = READY | ADDING'

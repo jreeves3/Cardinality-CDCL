@@ -96,7 +96,7 @@ void Internal::protect_reasons () {
     Clause * reason = v.reason;
     if (!reason) continue;
     LOG (reason, "protecting assigned %d reason %p", lit, (void*) reason);
-    assert (!reason->reason);
+    // assert (!reason->reason);
     reason->reason = true;
     count++;
   }
@@ -121,7 +121,7 @@ void Internal::unprotect_reasons () {
     Clause * reason = v.reason;
     if (!reason) continue;
     LOG (reason, "unprotecting assigned %d reason %p", lit, (void*) reason);
-    assert (reason->reason);
+    // assert (reason->reason);
     reason->reason = false;
     count++;
   }
@@ -173,9 +173,11 @@ inline void Internal::flush_watches (int lit, Watches & saved) {
     if (c->collect ()) continue;
     if (c->moved) c = w.clause = c->copy;
     w.size = c->size;
-    const int new_blit_pos = (c->literals[0] == lit);
-    assert (c->literals[!new_blit_pos] == lit);        /*FW1*/
-    w.blit = c->literals[new_blit_pos];
+    if (!w.cardinality_clause()) {
+      const int new_blit_pos = (c->literals[0] == lit);
+      assert (c->literals[!new_blit_pos] == lit);        /*FW1*/
+      w.set_blit(c->literals[new_blit_pos]);
+    }
     if (w.binary ()) *j++ = w;
     else saved.push_back (w);
   }
@@ -207,6 +209,7 @@ void Internal::update_reason_references () {
     Var & v = var (lit);
     Clause * c = v.reason;
     if (!c) continue;
+    if (c->unwatched > 2) continue;
     LOG (c, "updating assigned %d reason", lit);
     assert (c->reason);
     assert (c->moved);
@@ -341,7 +344,7 @@ void Internal::copy_non_garbage_clauses () {
     for (int sign = -1; sign <= 1; sign += 2)
       for (int idx = queue.last; idx; idx = link (idx).prev)
         for (const auto & w : watches (sign * likely_phase (idx)))
-          if (!w.clause->moved && !w.clause->collect ())
+          if (!w.clause->moved && !w.clause->collect () && !w.cardinality_clause())
             copy_clause (w.clause);
   }
 
@@ -397,6 +400,14 @@ void Internal::check_clause_stats () {
     if (!c->redundant) irrbytes += c->bytes ();
     total++;
   }
+  for (const auto & c : CARclauses) {
+    if (c->garbage) continue;
+    if (c->redundant) redundant++; else irredundant++;
+    if (!c->redundant) irrbytes += c->bytes ();
+    total++;
+  }
+
+
   assert (stats.current.irredundant == irredundant);
   assert (stats.current.redundant == redundant);
   assert (stats.current.total == total);

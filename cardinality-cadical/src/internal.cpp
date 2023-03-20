@@ -47,7 +47,9 @@ Internal::Internal ()
   external (0),
   termination_forced (false),
   vars (this->max_var),
-  lits (this->max_var)
+  lits (this->max_var),
+  original_cardinality (0),
+  cardinality_conflict_literal(0)
 {
   control.push_back (Level (0, 0));
 }
@@ -171,6 +173,21 @@ void Internal::init_vars (int new_max_var) {
   LOG ("finished initializing %d internal variables", initialized);
 }
 
+void Internal::CARadd_original_lit (int lit) {
+  assert (abs (lit) <= max_var);
+  if (!original_cardinality) {
+    original_cardinality = lit;
+  }
+  else if (lit) {
+    original.push_back (lit);
+  } else {
+    // if (proof) proof->add_original_clause (original);
+    CARadd_new_original_clause ();
+    original.clear ();
+    original_cardinality = 0;
+  }
+}
+
 void Internal::add_original_lit (int lit) {
   assert (abs (lit) <= max_var);
   if (lit) {
@@ -188,6 +205,18 @@ void Internal::add_original_lit (int lit) {
 
 int Internal::cdcl_loop_with_inprocessing () {
 
+  // check the watches and if there exists an outstanding conflict
+  // for (const auto & c : CARclauses) {
+  //     // check watches
+  //     int num_watches = 0;
+  //     literal_iterator lits = c->begin ();
+  //     for (int i = 0; i < c->size; i++) {
+  //       if (CARcheck_watch (lits[i], c)) num_watches++;
+  //     }
+  //     LOG ("Num of watches %d for cardinality %d",num_watches, c->unwatched-1);
+  //   }
+  //   exit(1);
+
   int res = 0;
 
   START (search);
@@ -198,7 +227,7 @@ int Internal::cdcl_loop_with_inprocessing () {
   while (!res) {
          if (unsat) res = 20;
     else if (unsat_constraint) res = 20;
-    else if (!propagate ()) analyze ();      // propagate and analyze
+    else if (!CARpropagate ()) CARanalyze ();      // propagate and analyze
     else if (iterating) iterate ();          // report learned unit
     else if (satisfied ()) res = 10;         // found model
     else if (search_limits_hit ()) break;    // decision or conflict limit
@@ -207,11 +236,11 @@ int Internal::cdcl_loop_with_inprocessing () {
     else if (restarting ()) restart ();      // restart by backtracking
     else if (rephasing ()) rephase ();       // reset variable phases
     else if (reducing ()) reduce ();         // collect useless clauses
-    else if (probing ()) probe ();           // failed literal probing
-    else if (subsuming ()) subsume ();       // subsumption algorithm
+    // else if (probing ()) probe ();           // failed literal probing
+    else if (subsuming ()) subsume ();      // subsumption algorithm
     else if (eliminating ()) elim ();        // variable elimination
-    else if (compacting ()) compact ();      // collect variables
-    else if (conditioning ()) condition ();  // globally blocked clauses
+    // else if (compacting ()) compact ();      // collect variables
+    // else if (conditioning ()) condition ();  // globally blocked clauses
     else res = decide ();                    // next decision
   }
 
@@ -219,6 +248,36 @@ int Internal::cdcl_loop_with_inprocessing () {
   else        { STOP (unstable); report ('}'); }
 
   STOP (search);
+
+
+  // check the watches and if there exists an outstanding conflict
+  // int unsatisfied;
+  // for (const auto & c : CARclauses) {
+  //   unsatisfied = 0;
+  //   literal_iterator lits = c->begin ();
+  //   for (int i = 0; i < c->size; i++) {
+  //     if (val (lits[i]) < 0) unsatisfied++;
+  //   }
+
+  //   if (c->size - unsatisfied < c->unwatched-1) { // conflict exists
+  //     LOG (c, "Falsified but no conflict unwatched %d",c->unwatched);
+  //     VERBOSE (1, "Falsified but no conflict unwatched ");
+  //     for (int i = 0; i < c->size; i++) {
+  //       LOG ("Value %d for lit %d",val (lits[i]), lits[i]);
+  //     }
+  //     // check watches
+  //     int num_watches = 0;
+  //     literal_iterator lits = c->begin ();
+  //     for (int i = 0; i < c->size; i++) {
+  //       if (CARcheck_watch (lits[i], c)) num_watches++;
+  //     }
+  //     LOG ("Num of watches %d for cardinality %d",num_watches, c->unwatched-1);
+  //   }
+
+
+
+  // }
+
 
   return res;
 }
@@ -491,7 +550,7 @@ int Internal::try_to_satisfy_formula_by_saved_phases () {
     } else if (decide ()) {
       LOG ("inconsistent assumptions with redundant clauses and phases");
       res = 20;
-    } else if (!propagate ()) {
+    } else if (!CARpropagate ()) {
       LOG ("saved phases do not satisfy redundant clauses");
       assert (level > 0);
       backtrack ();
@@ -514,7 +573,7 @@ void Internal::produce_failed_assumptions () {
   while (!unsat) {
     assert (!satisfied ());
     if (decide ()) break;
-    while (!unsat && !propagate ())
+    while (!unsat && !CARpropagate ())
       analyze ();
   }
   if (unsat) LOG ("formula is actually unsatisfiable unconditionally");
@@ -582,6 +641,14 @@ int Internal::local_search () {
 int Internal::solve (bool preprocess_only) {
   assert (clause.empty ());
   START (solve);
+
+  // freeze all variables in cardinality constraints
+  for (auto c: CARclauses) {
+    for (int i = 0; i < c->size; i++) {
+      freeze (c->literals[i]);
+    }
+  }
+
   if (preprocess_only) LOG ("internal solving in preprocessing only mode");
   else LOG ("internal solving in full mode");
   init_report_limits ();
@@ -610,7 +677,7 @@ int Internal::already_solved () {
     res = 20;
   } else {
     if (level) backtrack ();
-    if (!propagate ()) {
+    if (!CARpropagate ()) {
       LOG ("root level propagation produces conflict");
       learn_empty_clause ();
       res = 20;
@@ -653,7 +720,7 @@ int Internal::restore_clauses () {
     report ('+');
     external->restore_clauses ();
     internal->report ('r');
-    if (!unsat && !propagate ()) {
+    if (!unsat && !CARpropagate ()) {
       LOG ("root level propagation after restore produces conflict");
       learn_empty_clause ();
       res = 20;

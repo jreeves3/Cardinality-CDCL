@@ -55,6 +55,13 @@ void Stats::print (Internal * internal) {
 
   SECTION ("statistics");
 
+  PRT ("cardinality conflicts:                  %15" PRId64, stats.car_conflict);
+  PRT ("cardinality propagations:               %15" PRId64, stats.car_propagation);
+  PRT ("cardinality propagated literals:        %15" PRId64, stats.car_propagated_literals);
+  PRT ("cardinality missed propagated literals: %15" PRId64 "   %10.2f    per propagated", stats.car_missed_propagated_literals, relative (stats.car_missed_propagated_literals, stats.car_propagated_literals+stats.car_missed_propagated_literals));
+  
+
+
   if (all || stats.blocked) {
   PRT ("blocked:         %15" PRId64 "   %10.2f %%  of irredundant clauses", stats.blocked, percent (stats.blocked, stats.added.irredundant));
   PRT ("  blockings:     %15" PRId64 "   %10.2f    internal", stats.blockings, relative (stats.conflicts, stats.blockings));

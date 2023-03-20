@@ -576,7 +576,7 @@ void Internal::subsume (bool update_limits) {
   if (unsat) return;
 
   backtrack ();
-  if (!propagate ()) {
+  if (!CARpropagate ()) {
     learn_empty_clause ();
     return;
   }
@@ -586,7 +586,7 @@ void Internal::subsume (bool update_limits) {
     subsume_round ();
     init_watches ();
     connect_watches ();
-    if (!unsat && !propagate ()) {
+    if (!unsat && !CARpropagate ()) {
       LOG ("propagation after subsume rounds results in inconsistency");
       learn_empty_clause ();
     }
