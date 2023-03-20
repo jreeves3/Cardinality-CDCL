@@ -9,13 +9,13 @@ Solver and Checker:
 To build use
 
 ```bash
-> sh build.sh
+sh build.sh
 ```
 
 To clean use
 
 ```bash
-> sh clean.sh
+sh clean.sh
 ```
 
 To extract paper table data from spreadsheets, use
@@ -46,10 +46,7 @@ To run configurations from the paper (on input KNF), and check result (as descri
 * ReEncode: `> sh scripts/ReEncode <KNF>`
 * ReEncodePair: `> sh scripts/ReEncodePair <KNF>`
 
-e.g., 
-```bash
-sh scripts/ccdcl.sh benchmarks/knf/php8.knf
-```
+e.g., `sh scripts/ccdcl.sh benchmarks/knf/php8.knf `
 
 The folder `tmp` will contain formulas and proofs when executing the scripts.
 
