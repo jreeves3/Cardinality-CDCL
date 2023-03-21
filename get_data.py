@@ -90,6 +90,16 @@ def print_solving_stats (input_card_stats,solve_stats,configurations):
     print("card stats too small!!")
     print(len(input_card_stats.keys()))
 
+# Checking portfolio with reencode and ccdcl (x2 penalty)
+#  configurations = ["ReEncode","ccdcl"]
+#  for b in input_card_stats.keys():
+#    d = input_card_stats[b]
+#    if float(d['\ufeffConRatio']) > 0.9:
+#      continue
+#    solve_stats[b]['portfolio-CPU'] = min([ 2*float(solve_stats[b][c+'-CPU']) for c in configurations])
+#
+#  configurations = [ "cadical","portfolio"]
+  
   nCon = len(configurations)
   nExclCon = {}
   nSolved = {}
@@ -116,33 +126,27 @@ def print_solving_stats (input_card_stats,solve_stats,configurations):
       if result == "SAT":
         truth = 0
         
-    bestCon = None
-    bestConT = 5000
-    sameValue = False
-    if truth != -1: # someone solved it
+    bestCons = []
+    minVal = min([ float(solve_stats[b][c+'-CPU']) for c in configurations])
+    if truth != -1 and minVal < 5000: # someone solved it
       for c in configurations:
-        time = float(solve_stats[b][c+'-CPU'])
-        if time >= 5000: continue
-        if time < bestConT:
-          bestConT = time
-          bestCon = c
-        elif time == bestConT:
-          if not sameValue:
-            same += 1
-          sameValue = True
-        nSolved[c][truth] += 1
+        if float(solve_stats[b][c+'-CPU']) == minVal:
+          bestCons.append(c)
+        if float(solve_stats[b][c+'-CPU']) < 5000:
+          nSolved[c][truth] += 1
         
-      if bestCon is not None and not sameValue:
-        nExclCon[bestCon][truth] += 1
-        if truth == 0: nSAT += 1
-        else: nUNSAT += 1
+      # split value if there is a tie
+      for c in bestCons: nExclCon[c][truth] += 1/len(bestCons)
+  
+      if truth == 0: nSAT += 1
+      else: nUNSAT += 1
       
   
   header = "SAT UNSAT SAT-BEST UNSAT-BEST PERCENT-BEST"
   print(header)
   for c in configurations:
     per = round(100 * (nExclCon[c][0]+nExclCon[c][1]) / float(nSAT + nUNSAT),2)
-    st = "{} & {} & {} & {} & {} & {} \\\\".format(c,nSolved[c][0], nSolved[c][1],nExclCon[c][0],nExclCon[c][1],per)
+    st = "{} & {} & {} & {} & {} & {} \\\\".format(c,nSolved[c][0], nSolved[c][1],round(nExclCon[c][0],2),round(nExclCon[c][1],2),per)
     print(st)
   print(cnt)
   print((nSAT,nUNSAT))
@@ -195,7 +199,7 @@ def get_extractor_data(file):
 def print_squares(stat_con, configurations):
 ## Tikz table formatting
 
-  print("\nMagic Squares")
+  print("Magic Squares")
   configurations = ["ReEncodePair","ReEncode","ccdcl","ccdclPlus"]
   print(list(range(5,13)))
   for c in configurations:
@@ -298,7 +302,7 @@ def get_data(plots,tables):
     print_card_extractor_stats (input_card_stats)
 
     print("\nSat Competition Solving Table\n")
-    configurations_check = [ "ReEncode","ccdclMinus","ccdcl","ccdclPlus","cadical"]
+    configurations_check = [ "cadical","ccdclMinus","ReEncode","ccdcl","ccdclPlus",]
     print_solving_stats (input_card_stats,solve_stats,configurations_check)
 
     print("\nSquares Solving Table\n")
