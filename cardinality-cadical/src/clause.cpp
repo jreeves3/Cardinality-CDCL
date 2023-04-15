@@ -446,6 +446,10 @@ void Internal::CARadd_new_original_clause () {
         {
           if (!vals[lit])
             assign_original_unit (lit);
+          else if (vals[lit] == -1) {
+            LOG ("Cardinality constraint from formula is conflicting during parsing");
+            learn_empty_clause ();
+          }
         }
     } else {
       if (original_cardinality == 1) {
