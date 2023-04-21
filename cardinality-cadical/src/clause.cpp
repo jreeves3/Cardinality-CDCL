@@ -442,12 +442,14 @@ void Internal::CARadd_new_original_clause () {
       }
     } else if (size == (unsigned long) original_cardinality) { // every literal must be true to meet cardinality constraint
       VERBOSE (1, "propagating original clause");
-      for (const auto & lit : original)
-        {
-          if (!vals[lit])
-            assign_original_unit (lit);
-          else if (vals[lit] == -1) {
+      for (const auto & lit : clause)
+      {
+            if (!vals[lit]) {
+              assign_original_unit (lit);
+          }
+          else if (vals[lit] == -1) { // literal may propagate from previous literals...
             LOG ("Cardinality constraint from formula is conflicting during parsing");
+            printf("learning here\n");
             learn_empty_clause ();
           }
         }
