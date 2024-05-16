@@ -53,6 +53,8 @@ void Logger::log (Internal * internal,
     if (c->redundant) printf (" glue %d redundant", c->glue);
     else printf (" irredundant");
     printf (" size %d clause[%" PRId64 "]", c->size, c->id);
+    if (c->unwatched > 2) printf (" cardinality constraint, bound %d ",c->unwatched -1);
+    if (c->unwatched > 2 && c->guard_literal) printf (" guard %d ",c->guard_literal);
     if (c->moved) printf (" ... (moved)");
     else {
       if (internal->opts.logsort) {

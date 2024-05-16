@@ -34,6 +34,7 @@ extern "C" {
 #include <queue>
 #include <string>
 #include <vector>
+#include <fstream>
 
 /*------------------------------------------------------------------------*/
 
@@ -234,9 +235,62 @@ struct Internal {
 
   /*----------------------------------------------------------------------*/
   // CCDCL 
+  vector<int> printUnitVector;
+  int CARwatch_in_garbage;
   int original_cardinality;
+  int original_guard;
   int cardinality_conflict_literal;
   vector<Clause*> CARclauses;      // ordered collection of all original cardinality clauses
+  vector<Clause*> CARencodingClauses; // ordered collection of all original encoding clauses
+  int stable_lim;
+  vector<bool> guard_literals;
+
+  
+
+  vector<double> mptab;
+
+  vector<vector<int>> encoding_derivation, encoding_clauses;
+
+  ofstream encoding_derivation_file;
+
+  int split_full_encoding (vector<int> lits, int start, int fresh_var, bool add_derivation);
+  void totalizer_branch_clauses (vector<int> left, vector<int> right, vector<int> mid, int bound, bool add_derivation);
+  vector<int> totalizer_mid_variables (int left, int right, int bound, int &fresh_var);
+  int totalizer_full_encoding (vector<int> lits, int bound, int fresh_var, bool add_derivation);
+  int sort_by_phase (vector<int> & lits);
+  void encode_cardinality_constraint (int cidx, bool by_score, bool add_derivation, bool only_derivation) ;
+  void add_encoding_clauses () ;
+  void log_lits (vector<int> lits);
+  void add_derivation_clause (vector<int> lits) ;
+  void add_encoding_derivation ();
+
+  void add_new_original_cardinality_clause ();
+
+  bool clause_contains_aux (Clause * c) {
+    for (auto lit : c->literals) {
+      if (i2e[vidx(lit)] > opts.ccdclAuxCut) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void delete_clauses_above_aux_cutoff () {
+    if (!level) backtrack ();
+    assert (!level); // must be fully backtracked to delete original clauses
+
+    for (const auto & c : clauses) {
+      if (clause_contains_aux (c)) {
+        if (c->garbage) continue;
+        mark_garbage (c);  
+      }
+    }
+    printf("c Removed Clauses\n");
+  }
+
+
+  bool are_guarded_constraints;
+
 
 
   /*----------------------------------------------------------------------*/
@@ -257,7 +311,8 @@ struct Internal {
 
   void init_scores (int old_max_var, int new_max_var);
 
-  void CARadd_original_lit (int lit);
+  void CARadd_original_lit (int lit, bool encoding = false);
+  void CARadd_original_guard (int lit);
   void add_original_lit (int lit);
 
   // Enlarge tables.
@@ -473,24 +528,53 @@ struct Internal {
 
   inline void CARwatch_literal (int lit, int blit, Clause * c) {
     assert (blit < c->size && blit >= 0);
+    assert (c->literals [blit] == lit);
+    assert (blit < c->unwatched);
+    // assert (val (lit) >= 0); // may be in conflict on collect
     Watches & ws = watches (lit);
     ws.push_back (Watch (blit, c, 1));
     LOG (c, "watch %d blit %d in", lit, blit);
   }
 
+  inline void CARwatch_guard (int lit, Clause * c) {
+    Watches & ws = watches (lit);
+    ws.push_back (Watch (0, c, 1));
+    LOG (c, "watch guard %d in", lit);
+  }
+
   inline void CARwatch_clause (Clause * c, int cardinality) {
-    assert(cardinality < c->size);
+    assert(cardinality <= c->size);
 
     if (cardinality == 1) { // normal clause, blocking literal used
       const int l0 = c->literals[0];
       const int l1 = c->literals[1];
       watch_literal (l0, l1, c);
       watch_literal (l1, l0, c);
-    } else { // cardinality+1 watches
-      for (int i = 0; i < cardinality+1; i++) {
-        int l1 = c->literals[i];
-        CARwatch_literal (l1, i, c);
+    } else if (cardinality == c->size) {
+      // may have an equality of constraint is guarded
+      assert (c->guard_literal);
+      for (int i = 0; i < cardinality; i++) {
+        int l = c->literals[i];
+        CARwatch_literal (l, i, c);
       }
+    }
+    else { // cardinality+1 watches
+      for (int i = 0; i < cardinality+1; i++) {
+        int l = c->literals[i];
+        CARwatch_literal (l, i, c);
+      }
+    }
+  }
+
+void CARswap_watched_literal (Clause *c, const int lit, int lit_pos) ;
+
+  inline void CARunwatch_some_literals (Clause * c, int new_bound) {
+    assert (new_bound < c->unwatched - 1); // bound cannot increase
+    // assert (new_bound > 0);
+    for (int i = new_bound + 1; i < c->unwatched; i++) {
+      const int l = c->literals[i];
+      // printf("remove wwatch %d\n",l);
+      remove_watch (watches (l), c);
     }
   }
 
@@ -538,8 +622,8 @@ struct Internal {
   // Managing clauses in 'clause.cpp'.  Without explicit 'Clause' argument
   // these functions work on the global temporary 'clause'.
   //
-  Clause * CARnew_clause (bool red, int glue = 0);
-  Clause * new_clause (bool red, int glue = 0);
+  Clause * CARnew_clause (bool red, int glue = 0, int guard = 0);
+  Clause * new_clause (bool red, int glue = 0, bool encoding = false);
   void promote_clause (Clause *, int new_glue);
   size_t shrink_clause (Clause *, int new_size);
   void minimize_sort_clause();
@@ -559,9 +643,11 @@ struct Internal {
 
   void deallocate_clause(Clause *);
   void delete_clause (Clause *);
+  void CARdelete_clause (Clause *);
   void mark_garbage (Clause *);
+  void CARmark_garbage (Clause *);
   void assign_original_unit (int);
-  void CARadd_new_original_clause ();
+  void CARadd_new_original_clause (bool encoding = false);
   void add_new_original_clause ();
   Clause * new_learned_redundant_clause (int glue);
   Clause * new_hyper_binary_resolved_clause (bool red, int glue);
@@ -682,7 +768,9 @@ struct Internal {
   // inprocessing and preprocessing.
   //
   int clause_contains_fixed_literal (Clause *);
+  int CARclause_contains_fixed_literal (Clause *);
   void remove_falsified_literals (Clause *);
+  void CARremove_falsified_and_satisfied_literals (Clause *);
   void mark_satisfied_clauses_as_garbage ();
   void copy_clause (Clause *);
   void flush_watches (int lit, Watches &);
@@ -691,6 +779,7 @@ struct Internal {
   void update_reason_references ();
   void copy_non_garbage_clauses ();
   void delete_garbage_clauses ();
+  void CARdelete_garbage_clauses ();
   void check_clause_stats ();
   void check_var_stats ();
   bool arenaing ();
@@ -959,9 +1048,12 @@ struct Internal {
 
     // ProbSAT/WalkSAT implementation called initially or from 'rephase'.
     //
+    int CARnSat (Clause *);
     void walk_save_minimum(Walker &);
     Clause *walk_pick_clause(Walker &);
-    unsigned walk_break_value(int lit);
+    Clause *walk_pick_cardinality_constraint(Walker &);
+    Clause *walk_pick_constraint(Walker &);
+    unsigned walk_break_value(int lit, Walker &);
     int walk_pick_lit(Walker &, Clause *);
     void walk_flip_lit(Walker &, int lit);
     int walk_round(int64_t limit, bool prev);
@@ -1401,6 +1493,44 @@ inline bool Internal::search_limits_hit ()
 }
 
 /*------------------------------------------------------------------------*/
+
+// Information that needs to be kept for dynamic cardinality 
+// constraint encodings. Specific to each constraint type.
+
+class Cardinality_constraint {
+public:
+  Internal *internal;
+
+  int cardIDX;
+  vector<int> encoded_prob_vars;
+  vector<int> unencoded_prob_vars; // this may get sorted
+
+  void sort_unencoded_prob_vars ();
+};
+
+class SplitAMO : Cardinality_constraint {
+public:
+
+  int last_aux_variable;
+
+  SplitAMO () {last_aux_variable = 0;}
+
+};
+
+struct Totalizer_root {
+  vector<int> counter_vars; // 1 .. bound + 1
+  int height; // distance to problem variables
+  // bound is length of couunter_vars - 1
+};
+
+class Totalizer : Cardinality_constraint {
+public:
+
+  // can add a new root to any of these roots
+  vector<Totalizer_root> roots;
+
+};
+
 
 }
 

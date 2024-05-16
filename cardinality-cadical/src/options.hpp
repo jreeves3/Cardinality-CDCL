@@ -19,10 +19,12 @@
 \
 /*      NAME         DEFAULT, LO, HI,O,P,R, USAGE */ \
 \
-OPTION( arena,             1,  0,  1,0,0,1, "allocate clauses in arena") \
+OPTION( arena,             0,  0,  1,0,0,1, "allocate clauses in arena") \
 OPTION( arenacompact,      1,  0,  1,0,0,1, "keep clauses compact") \
 OPTION( arenasort,         1,  0,  1,0,0,1, "sort clauses in arena") \
 OPTION( arenatype,         3,  1,  3,0,0,1, "1=clause, 2=var, 3=queue") \
+OPTION( aux,               0,  0,  2e9,0,0,1, "aux variables not used as decisions in SAT mode") \
+OPTION( auxNoElim,         0,  0,  1,0,0,1, "read list of variables from card_variables.txt and freeze them") \
 OPTION( binary,            1,  0,  1,0,0,1, "use binary proof format") \
 OPTION( block,             0,  0,  1,0,1,1, "blocked clause elimination") \
 OPTION( blockmaxclslim,  1e5,  1,2e9,2,0,1, "maximum clause size") \
@@ -31,8 +33,25 @@ OPTION( blockocclim,     1e2,  1,2e9,2,0,1, "occurrence limit") \
 OPTION( bump,              1,  0,  1,0,0,1, "bump variables") \
 OPTION( bumpreason,        1,  0,  1,0,0,1, "bump reason literals too") \
 OPTION( bumpreasondepth,   1,  1,  3,0,0,1, "bump reason depth") \
+OPTION( ccdclAuxConflicts,             1e6,  0,  2e9,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclAuxCut,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclAuxLevel,             60,  0,  1e9,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclAuxNoDecideMode,             0,  0,  1,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclAuxRemoveClauses,             0,  0,  1,0,0,0, "bump extra on card clauses") \
 OPTION( ccdclBump,             0,  0,  1,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclBumpGuard,             0,  0,  1,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclEncoding,             0,  0,  2,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclEncodingActivity,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclEncodingByScore,             0,  0,  2,0,0,0, "bump extra on card clauses") \
+OPTION( ccdclEncodingFirstConflict,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
 OPTION( ccdclInit,             0,  0,  1,0,0,0, "init card clauses with higher scores") \
+OPTION( ccdclMode,             0,  0,  3,0,0,0, "mode: 0 all, 1 only cardinality clauses, 2 only encoding clauses") \
+OPTION( ccdclNoDecideGuard,             0,  0,  1,0,0,0, "mode: 0 all, 1 only cardinality clauses, 2 only encoding clauses") \
+OPTION( ccdclProp,             0,  0,  1,0,0,0, "use propagations count to switch modes") \
+OPTION( ccdclStabLim,             0,  0,  2e9,0,0,0, "sucessive times in stable mode") \
+OPTION( ccdclWalkSelect,             0,  0,  3,0,0,0, "mode: 0 weighted random selection, 1 cardinality first, 2 clauses first") \
+OPTION( ccdclWalkWtRule,             1,  0,  3,0,0,0, "mode: 0 single break, 1 linear break, 2 break * size, 3 break ^ 2") \
+OPTION( ccdclWatch,        0,  0,  1,0,0,0, "watch card clauses after binary clauses but before other clauses") \
 OPTION( check,             0,  0,  1,0,0,0, "enable internal checking") \
 OPTION( checkassumptions,  1,  0,  1,0,0,0, "check assumptions satisfied") \
 OPTION( checkconstraint,   1,  0,  1,0,0,0, "check constraint satisfied") \
@@ -107,6 +126,7 @@ OPTION( lucky,             0,  0,  1,0,0,1, "search for lucky phases") \
 OPTION( minimize,          1,  0,  1,0,0,1, "minimize learned clauses") \
 OPTION( minimizedepth,   1e3,  0,1e3,0,0,1, "minimization depth") \
 OPTION( phase,             1,  0,  1,0,0,1, "initial phase") \
+OPTION( printUnits,        0,  0,  1,0,0,1, "failed literal probing" ) \
 OPTION( probe,             0,  0,  1,0,1,1, "failed literal probing" ) \
 OPTION( probehbr,          1,  0,  1,0,0,1, "learn hyper binary clauses") \
 OPTION( probeint,        5e3,  1,2e9,0,0,1, "probing interval" ) \
@@ -181,7 +201,7 @@ OPTION( vivifymineff,    2e4,  0,2e9,1,0,1, "minimum efficiency") \
 OPTION( vivifyonce,        0,  0,  2,0,0,1, "vivify once: 1=red, 2=red+irr") \
 OPTION( vivifyredeff,     75,  0,1e3,1,0,1, "redundant efficiency per mille") \
 OPTION( vivifyreleff,     20,  1,1e5,1,0,1, "relative efficiency per mille") \
-OPTION( walk,              0,  0,  1,0,0,1, "enable random walks") \
+OPTION( walk,              1,  0,  1,0,0,1, "enable random walks") \
 OPTION( walkmaxeff,      1e7,  0,2e9,1,0,1, "maximum efficiency") \
 OPTION( walkmineff,      1e5,  0,1e7,1,0,1, "minimum efficiency") \
 OPTION( walknonstable,     1,  0,  1,0,0,1, "walk in non-stabilizing phase") \

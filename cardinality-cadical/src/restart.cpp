@@ -18,28 +18,159 @@ namespace CaDiCaL {
 bool Internal::stabilizing () {
   if (!opts.stabilize) return false;
   if (stable && opts.stabilizeonly) return true;
-  if (stats.conflicts >= lim.stabilize) {
-    report (stable ? ']' : '}');
-    if (stable) STOP (stable);
-    else        STOP (unstable);
-    stable = !stable;
-    if (stable) stats.stabphases++;
-    PHASE ("stabilizing", stats.stabphases,
-      "reached stabilization limit %" PRId64 " after %" PRId64 " conflicts",
-      lim.stabilize, stats.conflicts);
-    inc.stabilize *= opts.stabilizefactor*1e-2;
-    if (inc.stabilize > opts.stabilizemaxint)
-      inc.stabilize = opts.stabilizemaxint;
-    lim.stabilize = stats.conflicts + inc.stabilize;
-    if (lim.stabilize <= stats.conflicts)
-      lim.stabilize = stats.conflicts + 1;
-    swap_averages ();
-    PHASE ("stabilizing", stats.stabphases,
-      "new stabilization limit %" PRId64 " at conflicts interval %" PRId64 "",
-      lim.stabilize, inc.stabilize);
-    report (stable ? '[' : '{');
-    if (stable) START (stable);
-    else        START (unstable);
+
+  if (opts.ccdclProp) {
+    if (stats.propagations.search >= lim.stabilize) {
+      report (stable ? ']' : '}');
+      if (stable) STOP (stable);
+      else        STOP (unstable);
+      stable = !stable;
+      if (opts.ccdclMode) {
+        if (stable) opts.ccdclMode = 1;
+        else opts.ccdclMode = 2;
+        clear_watches ();
+        connect_watches ();
+        backtrack();
+        if (!CARpropagate ()) {
+        LOG ("propagating after switching modes leads to conflict");
+        learn_empty_clause ();
+      }
+      }
+      if (stable) stats.stabphases++;
+      PHASE ("stabilizing", stats.stabphases,
+        "reached stabilization limit %" PRId64 " after %" PRId64 " propagations",
+        lim.stabilize, stats.propagations.search);
+      inc.stabilize *= opts.stabilizefactor;//*1e-2;
+      if (inc.stabilize > opts.stabilizemaxint)
+        inc.stabilize = opts.stabilizemaxint;
+      lim.stabilize = stats.propagations.search + inc.stabilize;
+      if (lim.stabilize <= stats.propagations.search)
+        lim.stabilize = stats.propagations.search + 1;
+      swap_averages ();
+      PHASE ("stabilizing", stats.stabphases,
+        "new stabilization limit %" PRId64 " at conflicts interval %" PRId64 "",
+        lim.stabilize, inc.stabilize);
+      report (stable ? '[' : '{');
+      if (stable) START (stable);
+      else        START (unstable);
+    }
+  }
+  else {
+
+    // repeat stable mode multiple times
+    // if (stable && stable_lim < opts.ccdclStabLim) {
+    //   stable_lim++;
+    //   inc.stabilize *= opts.stabilizefactor*1e-2;
+    //   if (inc.stabilize > opts.stabilizemaxint)
+    //     inc.stabilize = opts.stabilizemaxint;
+    //   lim.stabilize = stats.conflicts + inc.stabilize;
+    //   if (lim.stabilize <= stats.conflicts)
+    //     lim.stabilize = stats.conflicts + 1;
+    //   return stable;
+    // }
+    // if (!stable) stable_lim = 1;
+    if (opts.ccdclStabLim && stats.conflicts >= lim.stabilize) {
+      // Keep unstable at same limit, do not increase number of conflicts
+      if (stats.conflicts >= lim.stabilize) {
+        report (stable ? ']' : '}');
+        if (stable) STOP (stable);
+        else        STOP (unstable);
+        stable = !stable;
+        if (opts.ccdclMode) {
+          if (stable) opts.ccdclMode = 1;
+          else opts.ccdclMode = 2;
+
+          if (opts.ccdclAuxRemoveClauses && stable && stats.conflicts >= opts.ccdclAuxConflicts) {
+
+            if (averages.current.level >= opts.ccdclAuxLevel) {
+
+                // switch to pure CCDCL no encoding clasues
+              delete_clauses_above_aux_cutoff ();
+              opts.ccdclMode = 0;
+
+            }
+
+            
+          }
+
+          clear_watches ();
+          connect_watches ();
+          backtrack();
+          if (!CARpropagate ()) {
+            LOG ("propagating after switching modes leads to conflict");
+            learn_empty_clause ();
+          }
+        }
+        if (stable) stats.stabphases++;
+        PHASE ("stabilizing", stats.stabphases,
+          "reached stabilization limit %" PRId64 " after %" PRId64 " conflicts",
+          lim.stabilize, stats.conflicts);
+        // inc.stabilize *= opts.stabilizefactor*1e-2;
+        if (inc.stabilize > opts.stabilizemaxint)
+          inc.stabilize = opts.stabilizemaxint;
+        lim.stabilize = stats.conflicts + inc.stabilize;
+        if (lim.stabilize <= stats.conflicts)
+          lim.stabilize = stats.conflicts + 1;
+        swap_averages ();
+        PHASE ("stabilizing", stats.stabphases,
+          "new stabilization limit %" PRId64 " at conflicts interval %" PRId64 "",
+          lim.stabilize, inc.stabilize);
+        report (stable ? '[' : '{');
+        if (stable) START (stable);
+        else        START (unstable);
+      }
+    }
+    else { // NORMAL
+      if (stats.conflicts >= lim.stabilize) {
+        report (stable ? ']' : '}');
+        if (stable) STOP (stable);
+        else        STOP (unstable);
+        stable = !stable;
+        if (opts.ccdclMode) {
+          if (stable) opts.ccdclMode = 1;
+          else opts.ccdclMode = 2;
+          clear_watches ();
+          connect_watches ();
+          backtrack();
+          if (!CARpropagate ()) {
+            LOG ("propagating after switching modes leads to conflict");
+            learn_empty_clause ();
+          }
+        }
+        if (opts.ccdclEncoding == 2) {
+          if (!stable) {
+            if (opts.ccdclEncodingFirstConflict <= stats.conflicts) {
+              // after a stable phase, do some encoding of cardinality constraints
+              for (unsigned i = 0; i < CARclauses.size(); i++) {
+                Clause * c = CARclauses[i];
+                if (c->garbage) continue;
+                if (c->activity >= opts.ccdclEncodingActivity) {
+                  encode_cardinality_constraint (i, 0, 1, 0);
+                }
+                c->activity = 0;
+              }
+            }
+          }
+        }
+        if (stable) stats.stabphases++;
+        PHASE ("stabilizing", stats.stabphases,
+          "reached stabilization limit %" PRId64 " after %" PRId64 " conflicts",
+          lim.stabilize, stats.conflicts);
+        inc.stabilize *= opts.stabilizefactor*1e-2;
+        if (inc.stabilize > opts.stabilizemaxint)
+          inc.stabilize = opts.stabilizemaxint;
+        lim.stabilize = stats.conflicts + inc.stabilize;
+        if (lim.stabilize <= stats.conflicts)
+          lim.stabilize = stats.conflicts + 1;
+        swap_averages ();
+        PHASE ("stabilizing", stats.stabphases,
+          "new stabilization limit %" PRId64 " at conflicts interval %" PRId64 "",
+          lim.stabilize, inc.stabilize);
+        report (stable ? '[' : '{');
+        if (stable) START (stable);
+        else        START (unstable);
+      }
+    }
   }
   return stable;
 }

@@ -253,7 +253,8 @@ Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
       if (other != lit)
         analyze_literal (other, open);
   } else { // cardinality constraint
-    LOG (reason, "Analyzing");
+    // LOG (reason, "Cardinality Analyzing");
+    reason->activity++;
 
     for (int k = reason->unwatched; k < reason->size; k++) {
       assert (val (reason->literals[k]) < 0 && reason->literals[k] != lit);
@@ -272,11 +273,26 @@ Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
         bump_variable (reason->reason_literal);
       }
     if (cardinality_conflict_literal) {
-      assert (val (cardinality_conflict_literal) < 0 && reason->reason_literal != lit);
-      analyze_literal (cardinality_conflict_literal, open);
-      cardinality_conflict_literal = 0;
+        assert (val (cardinality_conflict_literal) < 0 && cardinality_conflict_literal != lit);
+        analyze_literal (cardinality_conflict_literal, open);
+        cardinality_conflict_literal = 0;
+      }
+    if (reason->guard_literal) {
+      if (opts.ccdclBumpGuard && use_scores ()) {
+        for (int bb = 0; bb < 1; bb++)
+          bump_variable (reason->guard_literal);
+      }
+      if (val (reason->guard_literal) > 0) {
+        assert (lit == reason->guard_literal);
+        assert (val (reason->guard_reason_literal) < 0 && reason->guard_reason_literal != lit);
+        analyze_literal (reason->guard_reason_literal, open);
+        reason->guard_reason_literal = 0;
+      } else {
+        //guard literal becomes a reason for propagation
+        LOG ("Analyzing %d", reason->guard_literal);
+        analyze_literal (reason->guard_literal, open);
+      }
     }
-    
   }
 }
 

@@ -36,6 +36,25 @@ void Internal::connect_watches (bool irredundant_only) {
     if (c->garbage || c->size > 2) continue;
     watch_clause (c);
   }
+  
+  if (opts.ccdclWatch) {
+    if (opts.ccdclMode == 0 || opts.ccdclMode == 1) {
+    // Then connect cardinality clauses.
+    for (const auto & c : CARclauses) {
+      if (c->garbage) continue;
+      if (irredundant_only && c->redundant) continue;
+      CARwatch_clause (c, c->unwatched-1);
+    }
+    }
+    if (opts.ccdclMode == 0 || opts.ccdclMode == 2) {
+    // Then connect cardinality clauses.
+    for (const auto & c : CARencodingClauses) {
+      if (c->garbage) continue;
+      if (irredundant_only && c->redundant) continue;
+      watch_clause (c);
+    }
+    }
+  } 
 
   // Then connect non-binary clauses.
   //
@@ -67,10 +86,36 @@ void Internal::connect_watches (bool irredundant_only) {
     }
   }
 
-  // Then connect cardinality clauses.
-  for (const auto & c : CARclauses) {
-    if (irredundant_only && c->redundant) continue;
-    CARwatch_clause (c, c->unwatched-1);
+  if (!opts.ccdclWatch) {
+    // Then connect cardinality clauses.
+        // if (opts.ccdclMode == 0 || opts.ccdclMode == 1 || opts.ccdclMode == 2) {
+        if (opts.ccdclMode == 0 || opts.ccdclMode == 1) {
+    // Then connect cardinality clauses.
+    for (const auto & c : CARclauses) {
+      if (c->garbage) continue;
+      if (irredundant_only && c->redundant) continue;
+      CARwatch_clause (c, c->unwatched-1);
+    }
+    }
+    if (opts.ccdclMode == 0 || opts.ccdclMode == 2) {
+    // Then connect cardinality clauses.
+    for (const auto & c : CARencodingClauses) {
+      if (c->garbage) continue;
+      if (irredundant_only && c->redundant) continue;
+      watch_clause (c);
+    }
+    }
+  }
+
+
+  // watch guarded literals
+  if (are_guarded_constraints) {
+    for (const auto & c : CARclauses) {
+        if (c->garbage) continue;
+        if (irredundant_only && c->redundant) continue;
+        if (c->guard_literal)
+          CARwatch_guard (c->guard_literal, c);
+    }
   }
 
   STOP (connect);
@@ -120,10 +165,13 @@ void Internal::connect_vivify_watches (bool irredundant_only) {
     }
   }
 
-  // Then connect cardinality clauses.
-  for (const auto & c : CARclauses) {
-    if (irredundant_only) continue;
-    CARwatch_clause (c, c->unwatched-1);
+  if (!opts.ccdclMode) {
+    // Then connect cardinality clauses.
+    for (const auto & c : CARclauses) {
+      if (c->garbage) continue;
+      if (irredundant_only) continue;
+      CARwatch_clause (c, c->unwatched-1);
+    }
   }
 
   STOP (connect);

@@ -92,7 +92,10 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
 
   bool knf = false;
   bool cardinality = false;
-  bool first_lit = true;
+  bool guarded = false;
+  bool encoding = false;
+  bool parsed_bound = true;
+  bool parsed_guard = false;
 
   // First read comments before header with possibly embedded options.
   //
@@ -220,6 +223,15 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
       cardinality = true;
       continue;
     }
+    if (ch == 'g') {
+      cardinality = true;
+      guarded = true;
+      continue;
+    }
+    if (ch == 'e') {
+      encoding = true;
+      continue;
+    }
     const char * err = parse_lit (ch, lit, vars, strict);
     if (err) return err;
     if (ch == 'c') {
@@ -228,16 +240,30 @@ const char * Parser::parse_dimacs_non_profiled (int & vars, int strict) {
           PER ("unexpected end-of-file in comment");
     }
     if (knf) {
-      if (first_lit) {
-        if (!cardinality)
+      if (parsed_bound) {
+        if (!cardinality) {
           solver->CARadd (1); // normal clause, cardinality 1
-        first_lit = false;
+          solver->CARadd (lit, encoding);
+        }
+        else
+          solver->CARadd (lit, encoding);
+        parsed_bound = false;
+        parsed_guard = true;
+      } else if (guarded && parsed_guard) {
+        solver->external->CARaddGuard (lit);
+        parsed_guard = false;
+        guarded = false;
+      } else {
+        solver->CARadd (lit, encoding);
+        cardinality = false;
       }
-      solver->CARadd (lit);
-      cardinality = false;
     } else solver->add (lit);
 
-    if (lit == 0) first_lit = true;
+    if (lit == 0) {
+      parsed_bound = true;
+      parsed_guard = false;
+      encoding = false;
+    }
 
     if (!found_inccnf_header &&
         !lit && parsed++ >= clauses && strict != FORCED)

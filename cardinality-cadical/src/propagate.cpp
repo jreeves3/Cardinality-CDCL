@@ -68,7 +68,10 @@ inline void Internal::search_assign (int lit, Clause * reason) {
   v.level = lit_level;
   v.trail = (int) trail.size ();
   v.reason = reason;
-  if (!lit_level) learn_unit_clause (lit);  // increases 'stats.fixed'
+  if (!lit_level) {
+    learn_unit_clause (lit);  // increases 'stats.fixed'
+    if (opts.printUnits) printUnitVector.push_back (abs (i2e[idx]));
+  }
   const signed char tmp = sign (lit);
   vals[idx] = tmp;
   vals[-idx] = -tmp;
@@ -331,106 +334,251 @@ bool Internal::CARpropagate () {
           }
         } else { // cardinality constraint
 
-          literal_iterator lits = w.clause->begin ();
+          const int guard_literal = w.clause->guard_literal;
 
-          const int unwatched = w.clause->unwatched;
-
-          const int size = w.clause->size;
-          const literal_iterator middle = lits + w.clause->pos;
-          const const_literal_iterator end = lits + size;
-          literal_iterator k = middle;
-
-          // Find replacement watch 'r' at position 'k' with value 'v'.
-
-          int r = 0;
-          signed char v = -1;
-          if (size > unwatched) { // at least 1 unwatched literal
-
-            while (k != end && (v = val (r = *k)) < 0)
-              k++;
-
-            if (v < 0) {  // need second search starting at the head?
-
-              k = lits + unwatched;
-              assert (w.clause->pos <= size);
-              while (k != middle && (v = val (r = *k)) < 0)
-                k++;
-            }
-
-            w.clause->pos = k - lits;  // always save position
-
-            assert (lits + unwatched <= k), assert (k <= w.clause->end ());
-          } //else every literal is watched, no replacement possible
+          if (guard_literal == lit) {
+            // propagating a guard literal on this cardinality constraint
 
 
-          if (v >= 0) { // Replacement satisfied or unassigned, simple swap
-
-            assert (k-lits >= unwatched); // k is not watched currently
-
-            int my_lit_pos = w.get_blit();
-
-            // swap position
-            lits[my_lit_pos] = r;
-            *k = lit;
+            // first check if there is a falsified watch
             
-            // watch new literal at position my_lit_pos
-            CARwatch_literal (r, my_lit_pos, w.clause);
-            j--;  // Drop this watch from the watch list of 'lit'.
-            LOG (w.clause, "unwatch %d in", lit);
+            literal_iterator lits = w.clause->begin ();
 
+            const int unwatched = w.clause->unwatched;
+
+            int falsified = 0, pos_falsified = -1;
+            for (int i = 0; i < unwatched; i++) { 
+              if (val (lits[i]) < 0) {falsified++; pos_falsified = i;}
+              if (falsified > 1) break;
+            }
+
+            if (falsified == 1) {
+              // a chance that we should propagate the cardinality constraint
+
+              // check if we can swap this lit
+              const int size = w.clause->size;
+              const literal_iterator middle = lits + w.clause->pos;
+              const const_literal_iterator end = lits + size;
+              literal_iterator k = middle;
+
+              int lit_falsified = lits[pos_falsified];
+
+              // Find replacement watch 'r' at position 'k' with value 'v'.
+
+              int r = 0;
+              signed char v = -1;
+              if (size > unwatched) { // at least 1 unwatched literal
+
+                while (k != end && (v = val (r = *k)) < 0)
+                  k++;
+
+                if (v < 0) {  // need second search starting at the head?
+
+                  k = lits + unwatched;
+                  assert (w.clause->pos <= size);
+                  while (k != middle && (v = val (r = *k)) < 0)
+                    k++;
+                }
+
+                w.clause->pos = k - lits;  // always save position
+
+                assert (lits + unwatched <= k), assert (k <= w.clause->end ());
+              } //else every literal is watched, no replacement possible
+
+
+              if (v >= 0) { // Replacement satisfied or unassigned, simple swap
+
+                assert (k-lits >= unwatched); // k is not watched currently
+
+                // swap position
+                lits[pos_falsified] = r;
+                *k = lit_falsified;
+                
+                // watch new literal at position my_lit_pos
+                CARwatch_literal (r, pos_falsified, w.clause);
+                remove_watch (watches (lit_falsified), w.clause);
+                LOG (w.clause, "unwatch %d in", lit_falsified);
+
+              } else {
+
+                // check if we can propagate all unassigned watched literals
+                // i.e., no other watched literal falsified
+                assert (!cardinality_conflict_literal);
+                // cardinality_conflict_literal = lit_falsified;
+                // for (int i = 0; i < unwatched; i++) {
+                //   if (lits[i] != lit_falsified && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
+                // }
+
+                assert (!guard_literal || val (guard_literal) < 0);
+
+                for (int i = 0; i < unwatched; i++) { 
+                  if (lits[i] != lit_falsified) assert (val (lits[i]) >= 0);
+                  if (val (lits[i]) == 0) {
+                    car_propagated_literals++;
+                    search_assign (lits[i], w.clause);
+                  } else { if (lits[i] != lit_falsified) {
+                      mptab[abs(lits[i])]++;
+                      car_missed_propagated_literals++;
+                    }
+                  }
+                }
+
+                w.clause->reason_literal = lit_falsified; // update reason for propagation
+
+                car_propagation++; // increment propagation count
+
+                // guard literal options here
+                /*
+                  Problem with assigning guard literal here is there is no reason
+                  would need to assign when guarded (-lit) is falsified. Hmmm, assigning here probably better for descrepancy problem though.
+                */
+                // if (guard_literal && !guard_val) 
+                //   search_assign (-guard_literal, w.clause);
+                
+              }
+            }
           } else {
+            // propagating a literal within the cardinality constraint
 
-            // check if we can propagate all unassigned watched literals
-            // i.e., no other watched literal falsified
+            const int guard_val = (!guard_literal) ? 0 : val (guard_literal);
 
-            for (int i = 0; i < unwatched; i++) {
-              if (lits[i] != lit && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
-            }
+            if (guard_val > 0) continue; // satisifed by guard literal
 
-            if (!cardinality_conflict_literal) { // propagate all other watches
+            
+
+            literal_iterator lits = w.clause->begin ();
+
+            const int unwatched = w.clause->unwatched;
+
+            const int size = w.clause->size;
+            const literal_iterator middle = lits + w.clause->pos;
+            const const_literal_iterator end = lits + size;
+            literal_iterator k = middle;
+
+            // Find replacement watch 'r' at position 'k' with value 'v'.
+
+            int r = 0;
+            signed char v = -1;
+            if (size > unwatched) { // at least 1 unwatched literal
+
+              while (k != end && (v = val (r = *k)) < 0)
+                k++;
+
+              if (v < 0) {  // need second search starting at the head?
+
+                k = lits + unwatched;
+                assert (w.clause->pos <= size);
+                while (k != middle && (v = val (r = *k)) < 0)
+                  k++;
+              }
+
+              w.clause->pos = k - lits;  // always save position
+
+              assert (lits + unwatched <= k), assert (k <= w.clause->end ());
+            } //else every literal is watched, no replacement possible
+
+
+            if (v >= 0) { // Replacement satisfied or unassigned, simple swap
+
+              assert (k-lits >= unwatched); // k is not watched currently
+
+              int my_lit_pos = w.get_blit();
+
+              assert (lits [my_lit_pos] == lit);
+
+              // swap position
+              lits[my_lit_pos] = r;
+              *k = lit;
               
-              for (int i = 0; i < unwatched; i++) { 
-                if (lits[i] != lit) assert (val (lits[i]) >= 0);
-                if (val (lits[i]) == 0) {
-                  car_propagated_literals++;
-                  search_assign (lits[i], w.clause);
-                } else { if (lits[i] != lit) car_missed_propagated_literals++;}
+              // watch new literal at position my_lit_pos
+              CARwatch_literal (r, my_lit_pos, w.clause);
+              j--;  // Drop this watch from the watch list of 'lit'.
+              LOG (w.clause, "unwatch %d in", lit);
+
+            } else {
+
+              // check if we can propagate all unassigned watched literals
+              // i.e., no other watched literal falsified
+              assert (!cardinality_conflict_literal);
+              for (int i = 0; i < unwatched; i++) {
+                if (lits[i] != lit && val (lits[i]) < 0) {cardinality_conflict_literal = lits[i]; break;}
               }
 
-              w.clause->reason_literal = lit; // update reason for propagation
+              if (!cardinality_conflict_literal) { // propagate all other watches
+                
+                if (!guard_literal || guard_val) {
 
-              car_propagation++; // increment propagation count
-            } else { //  conflict
-              // More than one watch assigned to false, breaking cardinality constraint
+                  assert (!guard_literal || val (guard_literal) < 0);
 
-              for (int i = unwatched+1; i < size; i++) {
-                assert( val (lits[i]) < 0);
+                  for (int i = 0; i < unwatched; i++) { 
+                    if (lits[i] != lit) assert (val (lits[i]) >= 0);
+                    if (val (lits[i]) == 0) {
+                      car_propagated_literals++;
+                      search_assign (lits[i], w.clause);
+                    } else { if (lits[i] != lit) {
+                        mptab[abs(lits[i])]++;
+                        car_missed_propagated_literals++;
+                      }
+                    }
+                  }
+
+                  w.clause->reason_literal = lit; // update reason for propagation
+
+                  car_propagation++; // increment propagation count
+
+                  // guard literal options here
+                  /*
+                    Problem with assigning guard literal here is there is no reason
+                    would need to assign when guarded (-lit) is falsified. Hmmm, assigning here probably better for descrepancy problem though.
+                  */
+                  // if (guard_literal && !guard_val) 
+                  //   search_assign (-guard_literal, w.clause);
+                } // else {
+                //   cardinality_conflict_literal = 0;
+                //   // case where guard_literal is not set, so do not propagate yet
+                //   // temporarily breaking our standard invariant on watches
+                //   // leaving one falsified watch pointer
+                  
+                // }
+
+              } else { //  conflict
+                // More than one watch assigned to false, breaking cardinality constraint
+
+                if (!guard_literal || guard_val ) { 
+                  // normal cardinality constraint
+
+                  conflict = w.clause;
+
+                  w.clause->reason_literal = lit; // update reason for propagation
+                  car_conflict++;
+
+                  break;
+                } else { 
+                  // guarded cardinality constraint
+
+                  search_assign (guard_literal, w.clause);
+                  w.clause->guard_reason_literal = cardinality_conflict_literal;
+                  cardinality_conflict_literal = 0;
+                  w.clause->reason_literal = lit;
+                }
               }
-
-              conflict = w.clause;
-
-              w.clause->reason_literal = lit; // update reason for propagation
-              car_conflict++;
-
-              break;
-
             }
-          }
-          
-          // // sanity check that wathes all still exist for cardinality clause
-          // int num_watches = 0;
-          // lits = (w.clause)->begin ();
-          // for (int i = 0; i < w.clause->unwatched; i++) {
+            
+            // // sanity check that wathes all still exist for cardinality clause
+            // int num_watches = 0;
+            // lits = (w.clause)->begin ();
+            // for (int i = 0; i < w.clause->unwatched; i++) {
 
-          //   if (CARcheck_watch (lits[i], w.clause)) num_watches++;
-          // }
-          // for (int i =  w.clause->unwatched; i < w.clause->size; i++)
-          //   if (val (w.clause->literals[i]) >= 0) printf("ERROR");
-          // if (num_watches != w.clause->unwatched) {
-          //   VERBOSE (1, "lost watches");
-          //   exit (1);
-          // }
+            //   if (CARcheck_watch (lits[i], w.clause)) num_watches++;
+            // }
+            // for (int i =  w.clause->unwatched; i < w.clause->size; i++)
+            //   if (val (w.clause->literals[i]) >= 0) printf("ERROR");
+            // if (num_watches != w.clause->unwatched) {
+            //   VERBOSE (1, "lost watches");
+            //   exit (1);
+            // }
 
+          } 
         }
       }
     }

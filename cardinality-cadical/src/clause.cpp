@@ -68,7 +68,7 @@ void Internal::mark_added (Clause * c) {
 
 /*------------------------------------------------------------------------*/
 
-Clause * Internal::CARnew_clause (bool red, int glue) {
+Clause * Internal::CARnew_clause (bool red, int glue, int guard) {
 
   assert (clause.size () <= (size_t) INT_MAX);
   const int size = (int) clause.size ();
@@ -109,12 +109,22 @@ Clause * Internal::CARnew_clause (bool red, int glue) {
   c->vivify = false;
   c->used = 0;
   c->cardinality_clause = true;
+  c->encoding = false;
 
   c->glue = glue;
   c->size = size;
   c->pos = original_cardinality + 1;
 
   c->unwatched = original_cardinality + 1;
+
+  // special case for guarded cardinality constraints
+  if (c->size == original_cardinality) {
+    assert (guard);
+    c->unwatched = c->size;
+  }
+
+  c->activity = 0;
+  c->guard_literal = guard;
 
   for (int i = 0; i < size; i++) c->literals[i] = clause[i];
 
@@ -143,7 +153,7 @@ Clause * Internal::CARnew_clause (bool red, int glue) {
   return c;
 }
 
-Clause * Internal::new_clause (bool red, int glue) {
+Clause * Internal::new_clause (bool red, int glue, bool encoding) {
 
   assert (clause.size () <= (size_t) INT_MAX);
   const int size = (int) clause.size ();
@@ -184,12 +194,14 @@ Clause * Internal::new_clause (bool red, int glue) {
   c->vivify = false;
   c->used = 0;
   c->cardinality_clause = false;
+  c->encoding = encoding;
 
   c->glue = glue;
   c->size = size;
   c->pos = 2;
 
   c->unwatched = 2;
+  c->guard_literal = 0;
 
   for (int i = 0; i < size; i++) c->literals[i] = clause[i];
 
@@ -210,7 +222,9 @@ Clause * Internal::new_clause (bool red, int glue) {
     stats.added.irredundant++;
   }
 
-  clauses.push_back (c);
+  if (encoding) CARencodingClauses.push_back (c);
+  else clauses.push_back (c);
+
   LOG (c, "new pointer %p", (void*) c);
 
   if (likely_to_be_kept_clause (c)) mark_added (c);
@@ -264,7 +278,7 @@ size_t Internal::shrink_clause (Clause * c, int new_size) {
     c->literals[i] = 0;
 #endif
 
-  if (c->pos >= new_size) c->pos = 2;
+  if (c->pos >= new_size) c->pos = c->unwatched; // updated for cardinality constraints
 
   size_t old_bytes = c->bytes ();
   c->size = new_size;
@@ -291,6 +305,28 @@ void Internal::deallocate_clause (Clause * c) {
   if (arena.contains (p)) return;
   LOG (c, "deallocate pointer %p", (void*) c);
   delete [] p;
+}
+
+void Internal::CARdelete_clause (Clause * c) {
+  LOG (c, "delete pointer %p", (void*) c);
+  size_t bytes = c->bytes ();
+  stats.collected += bytes;
+  if (c->garbage) {
+    assert (stats.garbage >= (int64_t) bytes);
+    stats.garbage -= bytes;
+
+    // See the discussion in 'propagate' on avoiding to eagerly trace binary
+    // clauses as deleted (produce 'd ...' lines) as soon they are marked
+    // garbage.  We avoid this and only trace them as deleted when they are
+    // actually deleted here.  This allows the solver to propagate binary
+    // garbage clauses without producing incorrect 'd' lines.  The effect
+    // from the proof perspective is that the deletion of these binary
+    // clauses occurs later in the proof file.
+    //
+    // if (proof && c->size == 2)
+    //   proof->delete_clause (c);
+  }
+  deallocate_clause (c);
 }
 
 void Internal::delete_clause (Clause * c) {
@@ -362,6 +398,37 @@ void Internal::mark_garbage (Clause * c) {
   LOG (c, "marked garbage pointer %p", (void*) c);
 }
 
+void Internal::CARmark_garbage (Clause * c) {
+
+  assert (!c->garbage);
+
+  // Delay tracing deletion of binary clauses.  See the discussion above in
+  // 'delete_clause' and also in 'propagate'.
+  //
+  // if (proof && c->size != 2)
+  //   proof->delete_clause (c);
+
+  assert (stats.current.total > 0);
+  stats.current.total--;
+
+  size_t bytes = c->bytes ();
+  if (c->redundant) {
+    assert (stats.current.redundant > 0);
+    stats.current.redundant--;
+  } else {
+    assert (stats.current.irredundant > 0);
+    stats.current.irredundant--;
+    assert (stats.irrbytes >= (int64_t) bytes);
+    stats.irrbytes -= bytes;
+    // mark_removed (c);
+  }
+  stats.garbage += bytes;
+  c->garbage = true;
+  c->used = 0;
+
+  LOG (c, "marked garbage pointer %p", (void*) c);
+}
+
 /*------------------------------------------------------------------------*/
 
 // Almost the same function as 'search_assign' except that we do not pretend
@@ -384,6 +451,7 @@ void Internal::assign_original_unit (int lit) {
   trail.push_back (lit);
   LOG ("original unit assign %d", lit);
   mark_fixed (lit);
+  if (opts.printUnits) printUnitVector.push_back (abs (i2e[idx]));
   if (CARpropagate ()) return;
   LOG ("propagation of original unit results in conflict");
   learn_empty_clause ();
@@ -391,10 +459,11 @@ void Internal::assign_original_unit (int lit) {
 
 // New cardinality clause added through the API, e.g., while parsing a DIMACS file.
 //
-void Internal::CARadd_new_original_clause () {
+void Internal::CARadd_new_original_clause (bool encoding) {
   if (level) backtrack ();
   LOG (original, "original clause");
   bool skip = false;
+  bool guarded = (original_guard != 0);
   int satisfied_literals = 0;
   if (unsat) {
     LOG ("skipping clause since formula already inconsistent");
@@ -431,35 +500,46 @@ void Internal::CARadd_new_original_clause () {
   //   if (proof) proof->delete_clause (original);
   // } else {
     size_t size = clause.size ();
-    if (original_cardinality <= 0) { // clause is satisfied
+    if (original_cardinality <= 0 ) { // clause is satisfied
       VERBOSE (1, "found satisfied original clause");
-    }
-    else if (!size || size < (unsigned long) original_cardinality) {
+    } else if (guarded && val (original_guard) > 0) {
+      VERBOSE (1, "found satisfied original clause on guard");
+    } else if (!size || size < (unsigned long) original_cardinality) {
       if (!unsat) {
-        if (!original.size ()) VERBOSE (1, "found empty original clause");
-        else MSG ("found falsified original clause");
-        unsat = true;
+        if (guarded && ! (val (original_guard))) {
+          assign_original_unit (original_guard);
+        } else {
+          if (!original.size ()) VERBOSE (1, "found empty original clause");
+          else MSG ("found falsified original clause");
+          unsat = true;
+        }
       }
-    } else if (size == (unsigned long) original_cardinality) { // every literal must be true to meet cardinality constraint
+    } else if (size == (unsigned long) original_cardinality && (!guarded || val (original_guard) < 0)) { // every literal must be true to meet cardinality constraint
       VERBOSE (1, "propagating original clause");
       for (const auto & lit : clause)
       {
-            if (!vals[lit]) {
-              assign_original_unit (lit);
-          }
-          else if (vals[lit] == -1) { // literal may propagate from previous literals...
-            LOG ("Cardinality constraint from formula is conflicting during parsing");
-            printf("learning here\n");
-            learn_empty_clause ();
+        if (!vals[lit]) {
+          assign_original_unit (lit);
+          if (unsat) {
+            clause.clear ();
+            return;
           }
         }
+        else if (vals[lit] == -1) { // literal may propagate from previous literals...
+          LOG ("Cardinality constraint from formula is conflicting during parsing");
+          learn_empty_clause ();
+        }
+      }
     } else {
       if (original_cardinality == 1) {
-        Clause * c = new_clause (false);
+        Clause * c = new_clause (false, 0, encoding);
         watch_clause (c);
       } else {
-        Clause * c = CARnew_clause (false);
+        Clause * c = CARnew_clause (false, 0, original_guard);
         CARwatch_clause (c, original_cardinality);
+        if (original_guard) {// && !val (original_guard)) { this will get sorted in first call to collect
+          CARwatch_guard (original_guard, c);
+        }
       }
     }
   }
@@ -475,6 +555,68 @@ void Internal::CARadd_new_original_clause () {
   // }
   // }
 
+  clause.clear ();
+}
+
+// New clause added through the API, e.g., while parsing a DIMACS file.
+//
+void Internal::add_new_original_cardinality_clause () {
+  LOG (original, "original encoded clause");
+  bool skip = false;
+  if (unsat) {
+    LOG ("skipping clause since formula already inconsistent");
+    skip = true;
+  } else {
+    assert (clause.empty ());
+    for (const auto & lit : original) {
+      Flags & f = internal->flags (lit);
+      if (f.status == Flags::UNUSED) internal->mark_active (lit);
+      int tmp = marked (lit);
+      if (tmp > 0) {
+        LOG ("removing duplicated literal %d", lit);
+      } else if (tmp < 0) {
+        LOG ("tautological since both %d and %d occur", -lit, lit);
+        skip = true;
+      } else {
+        mark (lit);
+        tmp = val (lit);
+        if (tmp < 0) {
+          LOG ("removing falsified literal %d", lit);
+        } else if (tmp > 0) {
+          LOG ("satisfied since literal %d true", lit);
+          skip = true;
+        } else {
+          clause.push_back (lit);
+          // assert (flags (lit).status != Flags::UNUSED);
+        }
+      }
+    }
+    for (const auto & lit : original)
+      unmark (lit);
+  }
+  if (!skip) {
+    size_t size = clause.size ();
+    if (!size) {
+      log_lits (original);
+      if (!unsat) {
+        if (!original.size ()) VERBOSE (1, "found empty original clause");
+        else MSG ("found falsified original clause");
+        unsat = true;
+      }
+    } else if (size == 1) {
+      assign_original_unit (clause[0]);
+    } else {
+      Clause * c = new_clause (false);
+      watch_clause (c);
+    }
+  }
+  // if (original.size () > size) {
+  //   external->check_learned_clause ();
+  //   if (proof) {
+  //     proof->add_derived_clause (clause);
+  //     proof->delete_clause (original);
+  //   }
+  // }
   clause.clear ();
 }
 
@@ -607,3 +749,4 @@ Clause * Internal::new_resolved_irredundant_clause () {
 }
 
 }
+

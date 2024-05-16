@@ -45,6 +45,7 @@ struct Clause {
   bool vivified:1;    // clause already vivified
   bool vivify:1;      // clause scheduled to be vivified
   bool cardinality_clause:1;
+  bool encoding:1;
 
   // The glucose level ('LBD' or short 'glue') is a heuristic value for the
   // expected usefulness of a learned clause, where smaller glue is consider
@@ -87,6 +88,11 @@ struct Clause {
 
   int unwatched;    // Position of first unwatched literal (may be = size if all literals watched)
   int reason_literal; // Falsified watched literal used in reason
+  int guard_reason_literal;
+
+  int activity;
+
+  int guard_literal;
 
   union {
 
@@ -128,6 +134,8 @@ struct Clause {
   // code though for both situations and thus hide here this variance.
   //
   bool collect () const { return !reason && garbage; }
+
+  int CARbound () { return unwatched-1; }
 };
 
 struct clause_smaller_size {

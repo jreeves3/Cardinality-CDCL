@@ -31,6 +31,7 @@ bool Internal::minimize_literal (int lit, int depth) {
   const_literal_iterator i;
 
   if (v.reason->unwatched > 2) {
+    // cardinality constraint
     Clause *reason = v.reason;
     for (int k = reason->unwatched; res && k < reason->size; k++) {
       assert (val (reason->literals[k]) < 0 && reason->literals[k] != lit);
@@ -38,6 +39,14 @@ bool Internal::minimize_literal (int lit, int depth) {
     }
     assert (val (reason->reason_literal) < 0 && reason->reason_literal != lit);
     if (res) res = minimize_literal (-reason->reason_literal, depth + 1);
+    // guard literal becomes reason
+    if (res && v.reason->guard_literal) {
+      if (val (reason->guard_literal) > 0) {
+        assert (reason->guard_literal == lit);
+        res = minimize_literal (-reason->guard_reason_literal, depth + 1);
+      }
+      else
+        res = minimize_literal (-v.reason->guard_literal, depth + 1);}
   } else {
     for (i = v.reason->begin (); res && i != end; i++) {
       const int other = *i;

@@ -524,12 +524,12 @@ bool Solver::configure (const char * name) {
 
 /*===== IPASIR BEGIN =====================================================*/
 
-void Solver::CARadd (int lit) {
+void Solver::CARadd (int lit, bool encoding) {
   TRACE ("add", lit);
   REQUIRE_VALID_STATE ();
   if (lit) REQUIRE_VALID_LIT (lit);
   transition_to_unknown_state ();
-  external->CARadd (lit);
+  external->CARadd (lit, encoding);
   adding_clause = lit;
   if (adding_clause) STATE (ADDING);
   else if (!adding_constraint) STATE (UNKNOWN);

@@ -1,5 +1,6 @@
 #include "internal.hpp"
 
+
 namespace CaDiCaL {
 
 /*------------------------------------------------------------------------*/
@@ -49,6 +50,7 @@ Internal::Internal ()
   vars (this->max_var),
   lits (this->max_var),
   original_cardinality (0),
+  original_guard (0),
   cardinality_conflict_literal(0)
 {
   control.push_back (Level (0, 0));
@@ -143,6 +145,8 @@ void Internal::enlarge (int new_max_var) {
   enlarge_zero (phases.prev, new_vsize);
   enlarge_zero (phases.min, new_vsize);
   enlarge_zero (marks, new_vsize);
+
+  enlarge_zero (mptab, new_vsize);
   vsize = new_vsize;
 }
 
@@ -173,7 +177,9 @@ void Internal::init_vars (int new_max_var) {
   LOG ("finished initializing %d internal variables", initialized);
 }
 
-void Internal::CARadd_original_lit (int lit) {
+void Internal::CARadd_original_lit (int lit, bool encoding) {
+  // printf("lit %d %d\n",lit,max_var);
+
   assert (abs (lit) <= max_var);
   if (!original_cardinality) {
     original_cardinality = lit;
@@ -182,10 +188,18 @@ void Internal::CARadd_original_lit (int lit) {
     original.push_back (lit);
   } else {
     // if (proof) proof->add_original_clause (original);
-    CARadd_new_original_clause ();
+    CARadd_new_original_clause (encoding);
     original.clear ();
     original_cardinality = 0;
+    original_guard = 0;
   }
+}
+
+void Internal::CARadd_original_guard (int lit) {
+  // printf("lit %d %d\n",lit,max_var);
+  if (lit) are_guarded_constraints = true;
+  assert (abs (lit) <= max_var);
+  original_guard = lit;
 }
 
 void Internal::add_original_lit (int lit) {
@@ -217,12 +231,49 @@ int Internal::cdcl_loop_with_inprocessing () {
   //   }
   //   exit(1);
 
+  if (opts.ccdclEncoding)
+    encoding_derivation_file.open("encoding_derivation.drat");
+
+  if (opts.ccdclEncoding == 1) { 
+    // encode everything at the start
+    for (unsigned i = 0; i < CARclauses.size(); i++) {
+      encode_cardinality_constraint (i, 0, 1, 0);
+    }
+  }
+
+  if (opts.auxNoElim) {
+     fstream variableFile("card_variables.txt");
+     int freezeVar;
+     while (variableFile >> freezeVar) {
+       assert (freezeVar > 0 && freezeVar <= external->max_var);
+       freeze ((external->e2i [freezeVar]));
+     }
+   }
+
   int res = 0;
 
   START (search);
 
   if (stable) { START (stable);   report ('['); }
   else        { START (unstable); report ('{'); }
+
+  if (opts.ccdclMode) {
+    if (stable) opts.ccdclMode = 1;
+    else opts.ccdclMode = 2;
+    clear_watches ();
+    connect_watches ();
+    printf(" Length of clauses %d and carKlauses %d and CarEncoded %d\n",clauses.size(), CARclauses.size(),CARencodingClauses.size());
+  }
+
+  if (are_guarded_constraints) {
+    // disable some inprocessing...
+    opts.vivify = 0;
+    // opts.walk = 0;
+    // TODO: prevent flipping guard literals in local search
+    //       not a problem now because they don't appear in irre. clauses
+  }
+
+
 
   while (!res) {
          if (unsat) res = 20;
@@ -248,6 +299,18 @@ int Internal::cdcl_loop_with_inprocessing () {
   else        { STOP (unstable); report ('}'); }
 
   STOP (search);
+
+  if (opts.ccdclEncoding == 2) { 
+    // encode all non garbage cardinality constraints
+    for (unsigned i = 0; i < CARclauses.size(); i++) {
+      encode_cardinality_constraint (i, 0, 1, 1);
+    }
+  }
+
+  printf("c New Max Var %d\n",max_var);
+
+  if (opts.ccdclEncoding)
+    encoding_derivation_file.close ();
 
 
   // check the watches and if there exists an outstanding conflict
@@ -642,8 +705,28 @@ int Internal::solve (bool preprocess_only) {
   assert (clause.empty ());
   START (solve);
 
+  CARwatch_in_garbage = 1;
+
+  if (opts.printUnits) {
+    printf("Eliminated Variables ");
+    for (auto lit: printUnitVector)
+      printf("%d ",lit);
+    printf("\n");
+    }
+
+  for (int i = 0; i <= max_var; i++) guard_literals.push_back (false);
+
   // freeze all variables in cardinality constraints
   for (auto c: CARclauses) {
+    for (int i = 0; i < c->size; i++) {
+      freeze (c->literals[i]);
+    }
+    if (c->guard_literal) {
+      freeze (c->guard_literal);
+      guard_literals [abs (c->guard_literal)] = true;
+    }
+  }
+  for (auto c: CARencodingClauses) {
     for (int i = 0; i < c->size; i++) {
       freeze (c->literals[i]);
     }

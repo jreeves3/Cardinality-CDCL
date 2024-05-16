@@ -224,8 +224,13 @@ namespace CaDiCaL {
         const Clause &c = *v.reason;
         LOG(v.reason, "resolving with reason");
         if (v.reason->unwatched > 2) {
+          // cardinality constraint
           Clause *reason = v.reason;
           for (int k = reason->unwatched; k < reason->size; k++) {
+            if (val (reason->literals[k]) >= 0) {
+              printf ("lit %d, bound %d", reason->literals[k], reason->CARbound());
+              LOG (reason, "failed here");
+            }
             assert (val (reason->literals[k]) < 0);
             int lit = reason->literals[k];
             if(lit == uip)
@@ -248,6 +253,36 @@ namespace CaDiCaL {
             }
             if(tmp > 0) {
               ++open;
+            }
+          }
+          // guard literal becomes reason
+          if (reason->guard_literal) {
+            if (val (reason->guard_literal) > 0) {
+              assert (abs (reason->guard_literal) == abs (uip));
+              assert (val (reason->guard_reason_literal) < 0);
+              int lit = reason->guard_reason_literal;
+              if (!failed_ptr && lit != uip) {
+                int tmp = shrink_literal(lit, blevel, max_trail);
+                if(tmp < 0) {
+                  failed_ptr = true;
+                }
+                if(tmp > 0) {
+                  ++open;
+                }
+              }
+
+            } else {
+              assert (val (reason->guard_literal) < 0);
+              int lit = reason->guard_literal;
+              if (!failed_ptr && lit != uip) {
+                int tmp = shrink_literal(lit, blevel, max_trail);
+                if(tmp < 0) {
+                  failed_ptr = true;
+                }
+                if(tmp > 0) {
+                  ++open;
+                }
+              }
             }
           }
         }

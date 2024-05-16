@@ -27,6 +27,33 @@ int Internal::clause_contains_fixed_literal (Clause * c) {
   else                return 0;
 }
 
+// if tmp > 0, clause is satisfied
+// if tmp = 0, no change
+// if tmp < 0, remove satisfied or falsified literals
+int Internal::CARclause_contains_fixed_literal (Clause * c) {
+  int satisfied = 0, falsified = 0;
+  int bound = c->CARbound ();
+  for (const auto & lit : *c) {
+    const int tmp = fixed (lit);
+    if (tmp > 0) {
+      LOG (c, "root level satisfied literal %d in", lit);
+      satisfied++;
+    }
+    if (tmp < 0) {
+      LOG (c, "root level falsified literal %d in", lit);
+      falsified++;
+    }
+  }
+  if (c->guard_literal) {
+    const int tmp = fixed (c->guard_literal);
+    if (tmp > 0) satisfied = bound;
+    if (tmp < 0) falsified++;
+  }
+       if (satisfied >= bound) return 1;
+  else if (falsified || satisfied) return -1;
+  else                return 0;
+}
+
 // Assume that the clause is not root level satisfied but contains a literal
 // set to false (root level falsified literal), so it can be shrunken.  The
 // clause data is not actually reallocated at this point to avoid dealing
@@ -53,12 +80,232 @@ void Internal::remove_falsified_literals (Clause * c) {
   stats.collected += shrink_clause (c, j - c->begin ());
 }
 
+// Helper function to swap a literal in a cardinality constraint
+inline void Internal::CARswap_watched_literal (Clause *c, const int lit, int lit_pos) {
+  literal_iterator lits = c->begin ();
+
+  const int unwatched = c->CARbound () + 1; // new bound
+
+  const int size = c->size;
+  const literal_iterator middle = lits + c->pos;
+  const const_literal_iterator end = lits + size;
+  literal_iterator k = middle;
+
+  assert (c->pos >= unwatched && c->pos <= size); 
+  // if (c->pos >= size) {
+  //   int satisfied = 0, falsified = 0;
+  //   int bound = c->CARbound ();
+  //   for (const auto & lit : *c) {
+  //     const int tmp = fixed (lit);
+  //     if (tmp > 0) {
+  //       LOG (c, "root level satisfied literal %d in", lit);
+  //       satisfied++;
+  //     }
+  //     if (tmp < 0) {
+  //       LOG (c, "root level falsified literal %d in", lit);
+  //       falsified++;
+  //     }
+  //   }
+  //   printf("bound %d, nsat %d, nunsat %d, size %d, pos %d, unwatched %d \n", bound, satisfied, falsified, size, c->pos, c->unwatched);
+
+  //   c->pos = unwatched; 
+  // }
+  //TODO this shouldn't happen...
+  //It just means you are at the end
+  //not possible because it always resets...
+  // possible if coming in fresh (all watched) then some var is sat
+  // assert (c->pos < size);
+
+  // Find replacement watch 'r' at position 'k' with value 'v'.
+
+  int r = 0;
+  int v = 0;
+
+  int failed = 1;
+
+  r = *k;
+  while (k != end && (!(v = !fixed (r)) || val (r) < 0)) { // must be unassigned at top_level
+    k++;
+    r = *k;
+  }
+
+  
+
+  if (!v || k == end) {  // need second search starting at the head?
+
+    k = lits + unwatched;
+    r = *k;
+    while (k != middle && (!(v = !fixed (r)) || val (r) < 0)) {
+      k++;
+      r = *k;
+    }
+    if (k != middle) failed = 0;
+  } else failed = 0;
+
+  assert (lits [lit_pos] == lit);
+  
+
+  
+
+  // if (c->pos >= size) {
+  //   for (int i = 0; i < c->size; i++) {
+  //     printf ("lit %d val %d\n", lits[i], val (lits[i]));
+  //   }
+  //   printf ("bound %d\n", unwatched-1);
+  // }
+  if (failed) { // currently in conflict, relax swap conditions
+    k = lits + unwatched;
+    r = *k;
+    while (k != end && (!(v = !fixed (r)))) {
+      // if (lit == -175480)
+      //   printf("lit %d\n",r);
+      k++;
+      r = *k;
+    }
+  }
+
+  c->pos = k - lits;  // always save position
+
+  
+  assert (lits[c->pos] == r);
+
+  assert (k <= c->end ());
+
+  // if (!v || !(c->pos >= unwatched && c->pos < size)) {
+  //   for (int i = 0; i < c->size; i++) {
+  //     printf ("lit %d val %d fixed %d\n", lits[i], val (lits[i]), fixed (lits[i]));
+  //   }
+  //   printf ("bound %d cpos %d\n", unwatched-1, c->pos);
+  //   printf ("Swapping %d\n", lit);
+  // }
+
+  assert (c->pos >= unwatched && c->pos < size);
+  assert (v); // Replacement satisfied or unassigned, simple swap
+  // assert (val (r) >= 0);
+
+  // swap position
+  lits[lit_pos] = r;
+  *k = lit;
+  // printf ("%d at pos %d",r, lit_pos);
+  // printf ("%d at pos %d",lit, c->pos);
+
+  assert ((k-lits) >= unwatched);
+  // if ((k-lits) < unwatched) { // currently watched but at wrong position watched
+  //   if (CARwatch_in_garbage)
+  //     remove_watch (watches (r), c); // Drop this watch from the watch list of 'lit'.
+  // }  // could simply update the watch pos, then have an else with CARwatch_literal
+    
+  if (CARwatch_in_garbage && opts.ccdclMode != 2) {
+    // printf("unwwatch %d\n",lit);
+    remove_watch (watches (lit), c); // Drop this watch from the watch list of 'lit'.
+  // watch new literal at position my_lit_pos
+    // printf("wwatch %d\n",r);
+    CARwatch_literal (r, lit_pos, c);
+  }
+
+  LOG (c, "unwatch %d in", lit);
+}
+
+// Assume the cardinality constraint is not root level satisfied but 
+// contains root level satisfied or falsified literals.
+// For satisfied literals, we must adjust the bound.
+// Need to check if a watched literal is satisfied
+void Internal::CARremove_falsified_and_satisfied_literals (Clause * c) {
+  const const_literal_iterator end = c->end ();
+  const_literal_iterator i;
+  int num_non_false = 0;
+  int num_true = 0;
+  int new_bound;
+  int old_bound = c->CARbound ();
+  for (i = c->begin ();i != end; i++) {
+    if (! fixed (*i)) num_non_false++;
+    if (fixed (*i) > 0) num_true++;
+  }
+  new_bound = old_bound - num_true;
+
+  assert (num_non_false >= 2);
+
+  // if (new_bound == 1) { // add as a clause
+  //   printf ("adding with size %d, watch %d\n", num_non_false, CARwatch_in_garbage);
+  //   if (CARwatch_in_garbage)
+  //     CARunwatch_some_literals (c, 0); // unwatch all literals
+  //   clause.clear ();
+  //   for (i = c->begin ();i != end; i++) {
+  //     if (!fixed (*i))
+  //       clause.push_back (*i);
+  //   }
+  //   Clause * d = new_clause (c->redundant);
+  //   clause.clear(); // need to clear before proof logging
+  //   if (proof) {
+  //       proof->add_derived_clause (d);
+  //       clause.clear(); }
+  //   if (CARwatch_in_garbage)
+  //     watch_clause (d);
+  //   CARmark_garbage (c);
+  //   return;
+  // }
+
+  assert (new_bound > 0);
+  assert (num_non_false > new_bound);
+  assert (num_non_false != new_bound);
+  if (num_non_false == new_bound) return; // unit (is this possible? block with assertion)
+  if (num_true) {// new bound decremented by number true literals
+    // printf("unwwatch all\n");
+    if (CARwatch_in_garbage && opts.ccdclMode != 2)
+      CARunwatch_some_literals (c, new_bound); // unwatch literals no longer needed
+    if (c->unwatched == c->size+1) {
+      if (CARwatch_in_garbage) remove_watch (watches (c->literals[new_bound]), c);
+      c->unwatched = new_bound; // assume no falsified constraints or this would already be in conflict
+    } else
+      c->unwatched = new_bound + 1; // update unwatched with new bound
+  }
+  // if (proof) proof->flush_clause (c); // no proof for cardinality constraints
+  // literal_iterator j = c->begin ();
+  int early_it = 0;
+  for (int lit_pos = 0; lit_pos < c->size; lit_pos++) {
+    // printf("%d\n",lit_pos);
+  //   if (CARwatch_in_garbage) {
+  //   CARunwatch_some_literals (c, -1);
+  //   CARwatch_clause (c, new_bound);
+  // }
+    const int lit = c->literals[lit_pos], tmp = fixed (lit);
+    if (!tmp) {c->literals[early_it++] = lit; continue;} // unassigned literal is kept in constraint
+    if (tmp && lit_pos < new_bound + 1) { // remove satisfied literal
+      LOG ("flushing and swapping literal %d", lit);
+      CARswap_watched_literal (c, lit, lit_pos);
+      // c->literals[early_it++] = lit;
+      early_it++;
+      continue;
+    }
+    LOG ("flushing literal %d", lit);
+  }
+
+  // Promoted to normal cardinality constraint if guard = 0
+  if (CARwatch_in_garbage && c->guard_literal && fixed (c->guard_literal) < 0) {
+    // printf("Guard %d\n",c->guard_literal);
+    remove_watch (watches (c->guard_literal), c); 
+    c->guard_literal = 0;
+  }
+
+  // may have just been guard satisfied, at which point we don't shrink
+  if (early_it < c->size)
+    stats.collected += shrink_clause (c, early_it);
+
+  // if (CARwatch_in_garbage) {
+  //   CARunwatch_some_literals (c, -1);
+  //   CARwatch_clause (c, new_bound);
+  // }
+
+}
+
 // If there are new units (fixed variables) since the last garbage
 // collection we go over all clauses, mark satisfied ones as garbage and
 // flush falsified literals.  Otherwise if no new units have been generated
 // since the last garbage collection just skip this step.
 
 void Internal::mark_satisfied_clauses_as_garbage () {
+
+  // if (!CARwatch_in_garbage) assert (! watching ());
 
   if (last.collect.fixed >= stats.all.fixed) return;
   last.collect.fixed = stats.all.fixed;
@@ -71,6 +318,16 @@ void Internal::mark_satisfied_clauses_as_garbage () {
          if (tmp > 0) mark_garbage (c);
     else if (tmp < 0) remove_falsified_literals (c);
   }
+
+  LOG ("marking satisfied card constraints and removing falsified literals");
+
+  for (const auto & c : CARclauses) {
+    if (c->garbage) continue;
+    const int tmp = CARclause_contains_fixed_literal (c);
+         if (tmp > 0) CARmark_garbage (c); // removed in garbage collection
+    else if (tmp < 0) CARremove_falsified_and_satisfied_literals (c);
+  }
+
 }
 
 /*------------------------------------------------------------------------*/
@@ -209,7 +466,8 @@ void Internal::update_reason_references () {
     Var & v = var (lit);
     Clause * c = v.reason;
     if (!c) continue;
-    if (c->unwatched > 2) continue;
+    if (c->unwatched > 2) continue; // CAR check
+    if (c->encoding) continue;
     LOG (c, "updating assigned %d reason", lit);
     assert (c->reason);
     assert (c->moved);
@@ -245,6 +503,31 @@ void Internal::delete_garbage_clauses () {
   }
   clauses.resize (j - clauses.begin ());
   shrink_vector (clauses);
+
+  PHASE ("collect", stats.collections,
+    "collected %" PRId64 " bytes of %" PRId64 " garbage clauses",
+    collected_bytes, collected_clauses);
+}
+
+// same as above but for cardinality constraints
+void Internal::CARdelete_garbage_clauses () {
+
+  // flush_all_occs_and_watches ();
+
+  LOG ("deleting garbage cardinality constraints");
+  int64_t collected_bytes = 0, collected_clauses = 0;
+  const auto end = CARclauses.end ();
+  auto j = CARclauses.begin (), i = j;
+  while (i != end) {
+    Clause * c = *j++ = *i++;
+    if (!c->collect ()) continue;
+    collected_bytes += c->bytes ();
+    collected_clauses++;
+    CARdelete_clause (c); // can't delete this in proof
+    j--;
+  }
+  CARclauses.resize (j - CARclauses.begin ());
+  shrink_vector (CARclauses);
 
   PHASE ("collect", stats.collections,
     "collected %" PRId64 " bytes of %" PRId64 " garbage clauses",
@@ -344,7 +627,7 @@ void Internal::copy_non_garbage_clauses () {
     for (int sign = -1; sign <= 1; sign += 2)
       for (int idx = queue.last; idx; idx = link (idx).prev)
         for (const auto & w : watches (sign * likely_phase (idx)))
-          if (!w.clause->moved && !w.clause->collect () && !w.cardinality_clause())
+          if (!w.clause->moved && !w.clause->collect () && !w.cardinality_clause() && !w.clause->encoding)
             copy_clause (w.clause);
   }
 
@@ -406,6 +689,12 @@ void Internal::check_clause_stats () {
     if (!c->redundant) irrbytes += c->bytes ();
     total++;
   }
+  for (const auto & c : CARencodingClauses) {
+    if (c->garbage) continue;
+    if (c->redundant) redundant++; else irredundant++;
+    if (!c->redundant) irrbytes += c->bytes ();
+    total++;
+  }
 
 
   assert (stats.current.irredundant == irredundant);
@@ -429,12 +718,19 @@ void Internal::garbage_collection () {
   mark_satisfied_clauses_as_garbage ();
   if (!protected_reasons) protect_reasons ();
   if (arenaing ()) copy_non_garbage_clauses ();
-  else delete_garbage_clauses ();
+  else {
+    delete_garbage_clauses ();
+    CARdelete_garbage_clauses ();
+  }
   check_clause_stats ();
   check_var_stats ();
   unprotect_reasons ();
   report ('C', 1);
   STOP (collect);
+  // if (CARwatch_in_garbage) {
+  //   clear_watches ();
+  //   connect_watches ();
+  // }
 }
 
 }

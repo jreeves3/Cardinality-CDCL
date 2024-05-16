@@ -124,6 +124,8 @@ void Internal::rephase () {
   if (opts.stabilize && opts.stabilizeonly) single = true;
   else single = !opts.stabilize;
 
+  // type = rephase_walk ();
+
   if (single && !opts.walk) {
     // (inverted,best,flipping,best,random,best,original,best)^\omega
     switch (count % 8) {

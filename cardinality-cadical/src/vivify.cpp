@@ -611,7 +611,6 @@ void Internal::vivify_strengthen (Clause * c) {
 
     bool ok = CARpropagate ();
     if (!ok) {
-      printf("Learned on line 614\n");
       learn_empty_clause ();
     }
 
@@ -1087,11 +1086,10 @@ void Internal::vivify_round (bool redundant_mode, int64_t propagation_limit) {
   //
   const int64_t limit = stats.propagations.vivify + propagation_limit;
 
-  connect_watches (!redundant_mode);       // watch all relevant clauses
+  connect_vivify_watches (!redundant_mode);       // watch all relevant clauses
 
   if (!unsat && !CARpropagate ()) {
     LOG ("propagation after connecting watches in inconsistency");
-    printf("propagation after connecting watches in inconsistency\n");
     learn_empty_clause ();
   }
 
@@ -1148,7 +1146,6 @@ void Internal::vivify_round (bool redundant_mode, int64_t propagation_limit) {
 
     if (!CARpropagate ()) {
       LOG ("propagating vivified units leads to conflict");
-      printf("propagating vivified units leads to conflict\n");
       learn_empty_clause ();
     }
   }

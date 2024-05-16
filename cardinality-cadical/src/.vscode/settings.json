@@ -1,0 +1,12 @@
+{
+    "workbench.editor.enablePreview": false,
+    "files.associations": {
+        "vector": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "complex": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "chrono": "cpp"
+    }
+}

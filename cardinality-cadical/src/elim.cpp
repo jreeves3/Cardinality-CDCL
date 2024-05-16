@@ -731,7 +731,9 @@ int Internal::elim_round (bool & completed) {
 #endif
     if (stats.garbage <= garbage_limit) continue;
     mark_redundant_clauses_with_eliminated_variables_as_garbage ();
+    CARwatch_in_garbage = 0;
     garbage_collection ();
+    CARwatch_in_garbage = 1;
   }
 
   // If the schedule is empty all variables have been tried (even

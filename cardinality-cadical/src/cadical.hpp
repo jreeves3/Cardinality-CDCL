@@ -217,7 +217,7 @@ public:
   // Further note that 'lit' is required to be different from 'INT_MIN' and
   // different from '0' except for 'add'.
 
- void CARadd (int lit);
+ void CARadd (int lit, bool encoding = false);
 
   // Add valid literal to clause or zero to terminate clause.
   //

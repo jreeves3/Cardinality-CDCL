@@ -695,7 +695,9 @@ bool Internal::block () {
   assert (!watching ());
   assert (!occurring ());
 
+  CARwatch_in_garbage = 0;
   mark_satisfied_clauses_as_garbage ();
+  CARwatch_in_garbage = 1;
 
   init_occs ();  // Occurrence lists for all literals.
   init_noccs (); // Number of occurrences to avoid flushing garbage clauses.

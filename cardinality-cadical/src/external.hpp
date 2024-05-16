@@ -251,7 +251,8 @@ struct External {
 
   // Proxies to IPASIR functions.
 
-  void CARadd (int elit);
+  void CARadd (int elit, bool encoding);
+  void CARaddGuard (int elit);
   void add (int elit);
   void assume (int elit);
   int solve (bool preprocess_only);

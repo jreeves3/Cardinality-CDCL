@@ -16,6 +16,7 @@ External::External (Internal * i)
   assert (internal);
   assert (!internal->external);
   internal->external = this;
+  internal->are_guarded_constraints = false;
 }
 
 External::~External () {
@@ -131,7 +132,7 @@ int External::internalize (int elit) {
   return ilit;
 }
 
-void External::CARadd (int elit) {
+void External::CARadd (int elit, bool encoding) {
   assert (elit != INT_MIN);
   reset_extended ();
   if (internal->opts.check &&
@@ -144,8 +145,15 @@ void External::CARadd (int elit) {
     const int ilit = internalize (elit);
     assert (!elit == !ilit);
     if (elit) LOG ("adding external %d as internal %d", elit, ilit);
-    internal->CARadd_original_lit (ilit);
+    internal->CARadd_original_lit (ilit, encoding);
   }
+}
+
+void External::CARaddGuard (int elit) {
+  assert (elit != INT_MIN);
+  reset_extended ();
+  const int ilit = internalize (elit);
+  internal->CARadd_original_guard (elit);
 }
 
 void External::add (int elit) {
