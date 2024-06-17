@@ -1,6 +1,8 @@
 #!/bin/sh
 rm -r tmp
-(cd tools; make clean)
-(cd cadical; make clean)
+(cd Tools; make clean)
+(cd Tools/cadical; make clean)
+(cd Tools/drat-trim; make clean)
+(cd Extractor/cnf2knf; sh clean.sh)
 (cd cardinality-cadical; make clean)
-(cd drat-trim; make clean)
+rm Tools/check-sat/check-sat

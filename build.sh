@@ -1,7 +1,6 @@
 #!/bin/sh
 
 mkdir tmp
-(cd tools; make)
-(cd cadical; ./configure && make)
 (cd cardinality-cadical; ./configure && make)
-(cd drat-trim; make)
+(cd Extractor/cnf2knf; sh build.sh)
+(cd Tools; sh build.sh)

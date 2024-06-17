@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "unordered_map": "cpp",
+        "set": "cpp",
+        "vector": "cpp",
+        "__tree": "cpp",
+        "bitset": "cpp",
+        "iostream": "cpp",
+        "ostream": "cpp",
+        "__bit_reference": "cpp"
+    }
+}
