@@ -20,4 +20,8 @@ sh clean.sh
 ./cnf2knf test/maxsquare-7-33-UNSAT-total.cnf
 ```
 
-Note, only ALK is enabled currently, with logging turned on. Command line options will be added in the near future.
+To print options
+
+```bash
+./cnf2knf -h
+```
