@@ -84,4 +84,4 @@ To generate the derivation for the Linear AMO reencoding, use
 
 ## Data
 
-For extraction and solving on the SAT Annivesary track benchmarks, as well as an extractor compariosn on PySAT.Card encodings, refer to the CAV24 repository: https://github.com/jreeves3/CAV24-FromClausesToKlauses
+For extraction and solving on the SAT Annivesary track benchmarks, as well as an extractor compariosn on PySAT.Card encodings, refer to the CAV24 repository: https://github.com/jreeves3/CAV24-FromClausesToKlauses and paper: https://www.cs.cmu.edu/~jereeves/research/cav24-paper.pdf
