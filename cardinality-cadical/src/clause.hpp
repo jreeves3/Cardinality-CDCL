@@ -124,7 +124,23 @@ struct Clause {
     return align ((size - 2) * sizeof (int) + sizeof (Clause), 8);
   }
 
-  size_t bytes () const { return bytes (size); }
+  static size_t Sbytes (int size) {
+
+    // Memory sanitizer insists that clauses put into consecutive memory in
+    // the arena are still 8 byte aligned.  We could also allocate 8 byte
+    // aligned memory there.  However, assuming the real memory foot print
+    // of a clause is 8 bytes anyhow, we just allocate 8 byte aligned memory
+    // all the time (even if allocated outside of the arena).
+    //
+    assert (size == 1);
+    return align ((size - 1) * sizeof (int) + sizeof (Clause), 8);
+  }
+
+  size_t bytes () const { 
+    if (size == 1) {assert (guard_literal);return Sbytes ();}
+    return bytes (size); }
+
+  size_t Sbytes () const { return Sbytes (size); }
 
   // Check whether this clause is ready to be collected and deleted.  The
   // 'reason' flag is only there to protect reason clauses in 'reduce',

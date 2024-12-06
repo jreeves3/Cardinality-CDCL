@@ -72,7 +72,7 @@ Clause * Internal::CARnew_clause (bool red, int glue, int guard) {
 
   assert (clause.size () <= (size_t) INT_MAX);
   const int size = (int) clause.size ();
-  assert (size >= 2);
+  assert (size >= 2 || (guard && size == 1));
 
   if (glue > size) glue = size;
 
@@ -83,7 +83,9 @@ Clause * Internal::CARnew_clause (bool red, int glue, int guard) {
   else if (glue <= opts.reducetier1glue) keep = true;
   else keep = false;
 
-  size_t bytes = Clause::bytes (size);
+  size_t bytes;
+  if (size == 1 && guard) bytes = Clause::Sbytes (size);
+  else bytes = Clause::bytes (size);
   Clause * c = (Clause *) new char[bytes];
 
   stats.added.total++;
@@ -531,7 +533,7 @@ void Internal::CARadd_new_original_clause (bool encoding) {
         }
       }
     } else {
-      if (original_cardinality == 1) {
+      if (original_cardinality == 1 && (!guarded || val (original_guard) < 0) ) {
         Clause * c = new_clause (false, 0, encoding);
         watch_clause (c);
       } else {
