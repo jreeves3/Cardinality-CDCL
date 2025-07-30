@@ -545,20 +545,14 @@ struct Internal {
   inline void CARwatch_clause (Clause * c, int cardinality) {
     assert(cardinality <= c->size);
 
-    if (cardinality == 1) { // normal clause, blocking literal used
-      const int l0 = c->literals[0];
-      const int l1 = c->literals[1];
-      watch_literal (l0, l1, c);
-      watch_literal (l1, l0, c);
-    } else if (cardinality == c->size) {
-      // may have an equality of constraint is guarded
+    if (cardinality == c->size) {
+      // may have an equality if constraint is guarded
       assert (c->guard_literal);
       for (int i = 0; i < cardinality; i++) {
         int l = c->literals[i];
         CARwatch_literal (l, i, c);
       }
-    }
-    else { // cardinality+1 watches
+    } else { // cardinality+1 watches
       for (int i = 0; i < cardinality+1; i++) {
         int l = c->literals[i];
         CARwatch_literal (l, i, c);
