@@ -455,11 +455,13 @@ struct Call {
 
     CONSTRAIN    = (1<<25),
 
+    CARD       = (1<<26),   
+
     ALWAYS = VARS | ACTIVE | REDUNDANT | IRREDUNDANT | FREEZE | FROZEN | MELT |
              LIMIT | OPTIMIZE | DUMP | STATS | RESERVE | FIXED,
 
     CONFIG = INIT | SET | CONFIGURE | ALWAYS,
-    BEFORE = ADD | CONSTRAIN | ASSUME | ALWAYS,
+    BEFORE = ADD | CONSTRAIN | ASSUME | ALWAYS | CARD,
     PROCESS = SOLVE | SIMPLIFY | LOOKAHEAD | CUBING,
     AFTER = VAL | FAILED | ALWAYS,
   };
@@ -603,6 +605,14 @@ struct AddCall : public Call {
   void print (ostream & o) { o << "add " << arg << endl; }
   Call * copy () { return new AddCall (arg); }
   const char * keyword () { return "add"; }
+};
+
+struct CardCall : public Call {
+  CardCall (int l) : Call (CARD, l) { }
+  void execute (Solver * & s) { s->CARadd (arg); }
+  void print (ostream & o) { o << "cardadd " << arg << endl; }
+  Call * copy () { return new CardCall (arg); }
+  const char * keyword () { return "cardadd "; }
 };
 
 struct ConstrainCall : public Call {
@@ -892,6 +902,7 @@ private:
   void generate_queries (Random &);
   void generate_reserve (Random &, int vars);
   void generate_clause (Random &, int minvars, int maxvars, int uniform);
+  void generate_cardinality_constraint (Random &, int minvars, int maxvars, int uniform, int bound);
   void generate_constraint (Random &, int minvars, int maxvars, int uniform);
   void generate_assume (Random &, int vars);
   void generate_process (Random &);
@@ -1042,8 +1053,8 @@ void Trace::generate_options (Random & random, Size size) {
 
   // Also for checking models and assumptions, but with 80% probability.
   //
-  if (random.generate_double () < 0.8)
-    push_back (new SetCall ("check", 1));
+  // if (random.generate_double () < 0.8)
+  //   push_back (new SetCall ("check", 1));
 
   // In 10% of the remaining cases we use a configuration.
   //
@@ -1059,12 +1070,14 @@ void Trace::generate_options (Random & random, Size size) {
   // This is the fraction of options changed.
   //
   double fraction = random.generate_double ();
+  fraction = 1.1;
 
   // Generate a list of options, different from default values.
   //
   for (auto it = Options::begin (); it != Options::end (); it++)
   {
     const Option & o = *it;
+    continue;
 
     // This should not be reachable unless the low and high value of an
     // option in 'options.hpp' are the same.
@@ -1193,6 +1206,22 @@ void Trace::generate_clause (Random & random,
     clause.push_back (lit);
   }
   push_back (new AddCall (0));
+}
+
+void Trace::generate_cardinality_constraint (Random & random,
+                             int minvars, int maxvars,
+                             int uniform, int bound) {
+  assert (minvars <= maxvars);
+  int maxsize = maxvars - minvars + 1;
+  int size = uniform ? uniform : pick_size (random, maxsize);
+  vector<int> clause;
+  push_back (new CardCall (bound));
+  for (int i = 0; i < size; i++) {
+    int lit = pick_literal (random, minvars, maxvars, clause);
+    push_back (new CardCall (lit));
+    clause.push_back (lit);
+  }
+  push_back (new CardCall (0));
 }
 
 void Trace::generate_constraint (Random & random,
@@ -1332,7 +1361,7 @@ void Trace::generate_process (Random & random) {
     const int depth = random.pick_int (0, 10);
     push_back(new CubingCall(depth));
   }
-  else if (fraction > 0.9) push_back (new LookaheadCall ());
+  // else if (fraction > 0.9) push_back (new LookaheadCall ());
   else {
     const int rounds = random.pick_int (0, 10);
     push_back (new SimplifyCall (rounds));
@@ -1403,8 +1432,10 @@ void Trace::generate (uint64_t i, uint64_t s) {
       generate_reserve (random, maxvars),
       generate_clause (random, minvars, maxvars, uniform);
 
-    generate_constraint (random, minvars, maxvars, uniform);
-    generate_assume (random, maxvars);
+    generate_cardinality_constraint (random, 3, 8, uniform, 3);
+
+    // generate_constraint (random, minvars, maxvars, uniform);
+    // generate_assume (random, maxvars);
     generate_melt (random);
     generate_freeze (random, maxvars);
     generate_limits (random);
@@ -2313,7 +2344,18 @@ void Reader::parse () {
         error ("invalid literal '%d' as argument to 'add'", lit);
       adding = lit;
       c = new AddCall (lit);
-    } else if (!strcmp (keyword, "constrain")) {
+    } else if (!strcmp (keyword, "cardadd")) {
+      if (!first) error ("argument to 'add' missing");
+      if (!parse_int_str (first, lit))
+        error ("invalid argument '%s' to 'add'", first);
+      if (second) error ("additional argument '%s' to 'add'", second);
+      if (enforce && lit == INT_MIN)
+        error ("invalid literal '%d' as argument to 'add'", lit);
+      adding = lit;
+      c = new CardCall (lit);
+    }
+    
+    else if (!strcmp (keyword, "constrain")) {
       if (!first) error ("argument to 'constrain' missing");
       if (!parse_int_str (first, lit))
         error ("invalid argument '%s' to 'constrain'", first);

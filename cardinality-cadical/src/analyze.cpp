@@ -256,6 +256,21 @@ Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
     // LOG (reason, "Cardinality Analyzing");
     reason->activity++;
 
+    // if conflict and over falsified, I can pick the order for the reason...
+    if (cardinality_conflict_literal) {
+      // resort the cardinality constraint to minimize decision levels
+      int nFalsified = 0;
+      for (int k = 0; k < reason->unwatched; k++)
+        if (val(reason->literals[k]) < 0) nFalsified++;
+      if (nFalsified > 2) {
+        // perform resorting (overly falsified)
+        vector<int> temp_levels;
+
+
+        // printf("c over by %d\n", nFalsified - 2 );
+      }
+    }
+
     for (int k = reason->unwatched; k < reason->size; k++) {
       assert (val (reason->literals[k]) < 0 && reason->literals[k] != lit);
       analyze_literal (reason->literals[k], open);
@@ -276,6 +291,10 @@ Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
         assert (val (cardinality_conflict_literal) < 0 && cardinality_conflict_literal != lit);
         analyze_literal (cardinality_conflict_literal, open);
         cardinality_conflict_literal = 0;
+
+        // check if over falsified and by how much
+        
+
       }
     if (reason->guard_literal) {
       if (opts.ccdclBumpGuard && use_scores ()) {

@@ -307,7 +307,7 @@ int Internal::cdcl_loop_with_inprocessing () {
     }
   }
 
-  printf("c New Max Var %d\n",max_var);
+  // printf("c New Max Var %d\n",max_var);
 
   if (opts.ccdclEncoding)
     encoding_derivation_file.close ();
