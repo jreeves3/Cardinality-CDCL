@@ -49,6 +49,7 @@ Internal::Internal ()
   termination_forced (false),
   vars (this->max_var),
   lits (this->max_var),
+  skip_auxvars (false),
   original_cardinality (0),
   original_guard (0),
   cardinality_conflict_literal(0)
@@ -187,8 +188,12 @@ void Internal::CARadd_original_lit (int lit, bool encoding) {
   else if (lit) {
     original.push_back (lit);
   } else {
+    // Note: we do not support opposing literals in a cardinality constraint
+    if (original_cardinality == 1 && original_guard == 0)
+      add_new_original_clause ();
+    else 
     // if (proof) proof->add_original_clause (original);
-    CARadd_new_original_clause (encoding);
+      CARadd_new_original_clause (encoding);
     original.clear ();
     original_cardinality = 0;
     original_guard = 0;
@@ -230,6 +235,12 @@ int Internal::cdcl_loop_with_inprocessing () {
   //     LOG ("Num of watches %d for cardinality %d",num_watches, c->unwatched-1);
   //   }
   //   exit(1);
+
+  if (skip_auxvars) {
+    const char * err = 0;
+    parse_auxvars_file (auxvars_file, err);
+      if (err) {printf("Error parsing auxiliary variables file %s: %s\n",auxvars_file, err); exit(1);}
+  }
 
   if (opts.ccdclEncoding)
     encoding_derivation_file.open("encoding_derivation.drat");

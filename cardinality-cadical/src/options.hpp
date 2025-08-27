@@ -63,7 +63,7 @@ OPTION( chrono,            0,  0,  2,0,0,1, "chronological backtracking") \
 OPTION( chronoalways,      0,  0,  1,0,0,1, "force always chronological") \
 OPTION( chronolevelim,   1e2,  0,2e9,0,0,1, "chronological level limit") \
 OPTION( chronoreusetrail,  1,  0,  1,0,0,1, "reuse trail chronologically") \
-OPTION( compact,           1,  0,  1,0,1,1, "compact internal variables") \
+OPTION( compact,           0,  0,  1,0,1,1, "compact internal variables") \
 OPTION( compactint,      2e3,  1,2e9,0,0,1, "compacting interval") \
 OPTION( compactlim,      1e2,  0,1e3,0,0,1, "inactive limit per mille") \
 OPTION( compactmin,      1e2,  1,2e9,0,0,1, "minimum inactive limit") \
@@ -116,7 +116,7 @@ OPTION( flushfactor,       3,  1,1e3,0,0,1, "interval increase") \
 OPTION( flushint,        1e5,  1,2e9,0,0,1, "initial limit") \
 OPTION( forcephase,        0,  0,  1,0,0,1, "always use initial phase") \
 OPTION( inprocessing,      1,  0,  1,0,0,1, "enable inprocessing") \
-OPTION( instantiate,       0,  0,  1,0,1,1, "variable instantiation") \
+OPTION( instantiate,       0,  0,  0,0,1,1, "variable instantiation") \
 OPTION( instantiateclslim, 3,  2,2e9,0,0,1, "minimum clause size") \
 OPTION( instantiateocclim, 1,  1,2e9,2,0,1, "maximum occurrence limit") \
 OPTION( instantiateonce,   1,  0,  1,0,0,1, "instantiate each clause once") \
@@ -183,7 +183,7 @@ OPTION( subsumereleff,   1e3,  1,1e5,1,0,1, "relative efficiency per mille") \
 OPTION( subsumestr,        1,  0,  1,0,0,1, "strengthen during subsume") \
 OPTION( target,            1,  0,  2,0,0,1, "target phases (1=stable only)") \
 OPTION( terminateint,     10,  0,1e4,0,0,1, "termination check interval") \
-OPTION( ternary,           1,  0,  1,0,1,1, "hyper ternary resolution") \
+OPTION( ternary,           0,  0,  1,0,1,1, "hyper ternary resolution") \
 OPTION( ternarymaxadd,   1e3,  0,1e4,1,0,1, "max clauses added in percent") \
 OPTION( ternarymaxeff,   1e8,  0,2e9,1,0,1, "ternary maximum efficiency") \
 OPTION( ternarymineff,   1e6,  1,2e9,1,0,1, "minimum ternary efficiency") \

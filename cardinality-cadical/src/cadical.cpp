@@ -358,6 +358,13 @@ int App::main (int argc, char ** argv) {
         !strcmp (argv[i], "--version") ||
         !strcmp (argv[i], "--copyright")) {
       APPERR ("can only use '%s' as single first option", argv[i]);
+    } else if (!strcmp (argv[i], "--auxvars")) {
+      // Enable skipping auxiliary variables in decision.
+      // parse file string appearing next at i+1
+      solver->internal->skip_auxvars = true;
+      if (++i == argc) APPERR ("argument to '--auxvars' missing");
+      solver->internal->auxvars_file = argv[i];
+      continue;
     } else if (!strcmp (argv[i], "-")) {
       if (proof_specified) APPERR ("too many arguments");
       else if (!dimacs_specified) dimacs_specified = true;

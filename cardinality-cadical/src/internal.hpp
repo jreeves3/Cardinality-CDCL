@@ -234,6 +234,34 @@ struct Internal {
   const Sange lits;             // Provides safe literal iteration.
 
   /*----------------------------------------------------------------------*/
+  // Auxiliary variables skipping
+  vector<bool> auxvars; // auxiliary variables
+  bool skip_auxvars; // skip auxiliary variables in decision
+  char * auxvars_file; // path to auxiliary variables file
+  int aux_tolerance = 200000;
+
+  void parse_auxvars_file (const char * path, const char * & err) {
+    auxvars.clear ();
+    auxvars.resize (max_var + 1, false);
+    if (!path || !*path) return;
+    ifstream file (path);
+    if (!file) {
+      err = "could not open auxiliary variables file";
+      return;
+    }
+    int lit;
+    while (file >> lit) {
+      int var = abs (lit);
+      if (!var) break; // zero terminates
+      if (var  > max_var) {
+        err = "invalid auxiliary variable literal";
+        return;
+      }
+      auxvars[var] = true;
+    }
+  }
+
+  /*----------------------------------------------------------------------*/
   // CCDCL 
   vector<int> printUnitVector;
   int CARwatch_in_garbage;

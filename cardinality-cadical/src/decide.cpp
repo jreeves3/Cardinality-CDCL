@@ -12,9 +12,29 @@ namespace CaDiCaL {
 int Internal::next_decision_variable_on_queue () {
   int64_t searched = 0;
   int res = queue.unassigned;
+
+  // eventually other vars will bubble up past the aux vars so no need to pop and push to the back
+
   while (val (res))
     res = link (res).prev, searched++;
-  if (searched) {
+
+  if (skip_auxvars) {
+    int temp_res = res;
+    while (val (temp_res) || auxvars[i2e[vidx(temp_res)]]) {
+      temp_res = link (temp_res).prev;
+      searched++;
+      if (searched > aux_tolerance) {
+        LOG ("no unassigned decision variable found on queue");
+        break;
+      }
+    }
+    if (searched) {
+      update_queue_unassigned (res);
+      stats.searched += searched;
+    }
+    if (searched < aux_tolerance) 
+      res = temp_res;
+  } else if (searched) {
     stats.searched += searched;
     update_queue_unassigned (res);
   }
@@ -30,30 +50,35 @@ int Internal::next_decision_variable_with_best_score () {
   bool is_aux = false;
   bool is_guard = false;
   for (;;) {
-    if (decision_cnt > max_var) {
+    // if (decision_cnt > max_var) {
 
-      return -1;
+      // return -1;
 
-      printf("e Exiting on decision loop\n");
+      // printf("e Exiting on decision loop\n");
 
-      // check if any non aux variable is unassigned (should not be the case)
-      for (int i = 1; i < max_var; i++) {
-        // if (!val(i) && (i2e[vidx(i)] <= opts.aux)) {
-          // printf("e Variable %d unsassigned\n", (i2e[vidx(i)]));
-          printf("%d 0\n", val(i) * i2e[vidx(i)]);
-        // }
-      }
+      // // check if any non aux variable is unassigned (should not be the case)
+      // for (int i = 1; i < max_var; i++) {
+      //   // if (!val(i) && (i2e[vidx(i)] <= opts.aux)) {
+      //     // printf("e Variable %d unsassigned\n", (i2e[vidx(i)]));
+      //     printf("%d 0\n", val(i) * i2e[vidx(i)]);
+      //   // }
+      // }
 
-      abort ();
-    }
+      // abort ();
+    // }
     assert (!scores.empty());
     res = scores.front ();
     is_aux = (opts.aux && (i2e[vidx(res)] > opts.aux)) || (opts.ccdclAuxCut && opts.ccdclAuxNoDecideMode && (i2e[vidx(res)] > opts.ccdclAuxCut));
+    is_aux = is_aux || (skip_auxvars && auxvars[i2e[vidx(res)]]);
     is_guard = opts.ccdclNoDecideGuard && guard_literals [vidx (res)];
     if (!val (res) && !is_aux && !is_guard) {
       break;
     } else if (is_aux || is_guard) {
-      // if (!val (res) && decision_cnt > max_var) break;
+      // just select the first aux variable if you've gone through entire queue
+      if (!val (res) && decision_cnt > aux_tolerance) 
+        break; 
+      
+      // push aux variable to the back of the queue
       stab[res] = -1;
       scores.update(res);
       decision_cnt++;

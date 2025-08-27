@@ -474,12 +474,21 @@ void Internal::CARadd_new_original_clause (bool encoding) {
     assert (clause.empty ());
     for (const auto & lit : original) {
       int tmp = marked (lit);
+      if (tmp < 0) {
+        printf ("ERROR: Opposing literals not supported in a cardinality constraint. \nERROR: Clause Guard %d Bound %d", original_guard, original_cardinality);
+        for (const auto & lit : original) {
+          printf (" %d", lit);
+        }
+        printf ("\n");
+        exit (1);
+      }
       if (tmp > 0) {
         LOG ("removing duplicated literal %d", lit);
       // } else if (tmp < 0) {
       //   LOG ("tautological since both %d and %d occur", -lit, lit);
       //   skip = true;
       } else {
+        assert (!marked (lit));
         mark (lit);
         tmp = val (lit);
         if (tmp < 0) {
@@ -580,6 +589,7 @@ void Internal::add_new_original_cardinality_clause () {
         LOG ("tautological since both %d and %d occur", -lit, lit);
         skip = true;
       } else {
+        assert (!marked (lit));
         mark (lit);
         tmp = val (lit);
         if (tmp < 0) {
