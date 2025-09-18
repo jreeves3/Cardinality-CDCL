@@ -92,19 +92,30 @@ sh scripts/Extract.sh <CNF> <OUT.knf>
 
 To reencode a KNF into CNF, for the Linear encoding of AMO use
 ```bash
-./tools/knf2cnf <KNF> > <OUT.cnf>
+./Tools/knf2cnf <KNF> > <OUT.cnf>
 ```
 
 for the pairwise encoding of AMO constraints use
 ```bash
-./tools/pairwise <KNF> > <OUT.cnf>
+./Tools/pairwise <KNF> > <OUT.cnf>
 ```
 
 To generate the derivation for the Linear AMO reencoding, use
 ```bash
-./tools/derivation <KNF> > <OUT.drat>
+./Tools/derivation <KNF> > <OUT.drat>
+```
+## Encoding KNFs with PySAT Encodings
+
+First install the PySAT module (https://pysathq.github.io/docs/html/api/card.html)
+
+
+```bash
+python3 Tools/pysat_encode.py -k <KNF input> -c <CNF output> -e <encoding type [seqcounter, totalizer, sortnetwrk, cardnetwrk, mtotalizer, kmtotalizer]>
 ```
 
+Example execution 
+
+`python3 Tools/pysat_encode.py -k Benchmarks/KNF/magicsq-3.knf -c magicsq-3.cnf -e kmtotalizer`
 
 ## Data
 
