@@ -44,7 +44,7 @@ OPTION( ccdclEncoding,             0,  0,  0,0,0,0, "Experimental (disabled) - w
 OPTION( ccdclEncodingActivity,             0,  0,  2e9,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving based on activity") \
 OPTION( ccdclEncodingByScore,             0,  0,  2,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving based on variable score") \
 OPTION( ccdclEncodingFirstConflict,             0,  0,  2e9,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving after this given number of conflicts") \
-OPTION( ccdclMode,           0,  0,  1,0,0,0, "enables hybrid CCDCL: no propagation on cardinality clauses during unstable mode") \
+OPTION( ccdclMode,           0,  0,  1,0,0,0, "enables hybrid CCDCL: no propagation on cardinality clauses during unstable mode. Input formula must contain both cardinality constraints and their clausal encoding, since cardinality propagation is disabled during ustable mode.") \
 OPTION( ccdclNoDecideGuard,             0,  0,  1,0,0,0, "prevents decisions on guard variables from guarded cardinality constraints") \
 OPTION( ccdclProp,             0,  0,  1,0,0,0, "use propagations count to switch modes") \
 OPTION( ccdclStabLim,             0,  0,  0,0,0,0, "Experimental (disabled) - sucessive times in stable mode") \
