@@ -64,22 +64,24 @@ E.g., x1 + x1 + x2 >= 1 can be replaced by x3 + x4 + x2 >= 1 AND x1 <-> x3 AND x
 
 ## Running Scripts
 
+Proof checking is enabled with `1` and disabled with `0`. 
+
 To run configurations from the paper (on input CNF), and check result (as described in the paper):
 
-* CaDiCaL:  `> sh scripts/cadical <CNF>`
-* CCDCL:  `> sh scripts/ccdcl <CNF>`
-* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <CNF>`
-* ReEncode: `> sh scripts/ReEncode <CNF>`
+* CaDiCaL:  `> sh scripts/cadical <CNF> <ProofChecking>`
+* CCDCL:  `> sh scripts/ccdcl <CNF> <ProofChecking>`
+* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <CNF> <ProofChecking>`
+* ReEncode: `> sh scripts/ReEncode <CNF> <ProofChecking>`
 
-e.g., `sh scripts/ccdcl.sh benchmarks/cnf/php8.cnf`
+e.g. with proog checking, `sh scripts/ccdcl.sh benchmarks/cnf/php8.cnf 1`
 
 To run configurations from the paper (on input KNF), and check result (as described in the paper):
 
-* CCDCL:  `> sh scripts/ccdcl <KNF>`
-* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <KNF>`
-* ReEncode: `> sh scripts/ReEncode <KNF>`
+* CCDCL:  `> sh scripts/ccdcl <KNF> <ProofChecking>`
+* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <KNF> <ProofChecking>`
+* ReEncode: `> sh scripts/ReEncode <KNF> <ProofChecking>`
 
-e.g., `sh scripts/ccdcl.sh benchmarks/knf/php8.knf `
+e.g. with proog checking, `sh scripts/ccdcl.sh benchmarks/knf/php8.knf 1`
 
 The folder `tmp` will contain formulas and proofs when executing the scripts.
 
