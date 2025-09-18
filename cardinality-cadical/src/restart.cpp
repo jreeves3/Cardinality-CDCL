@@ -25,9 +25,9 @@ bool Internal::stabilizing () {
       if (stable) STOP (stable);
       else        STOP (unstable);
       stable = !stable;
-      if (opts.ccdclMode) {
-        if (stable) opts.ccdclMode = 1;
-        else opts.ccdclMode = 2;
+      if (ccdclHybridMode) {
+        if (stable) ccdclHybridMode = 1;
+        else ccdclHybridMode = 2;
         clear_watches ();
         connect_watches ();
         backtrack();
@@ -76,9 +76,9 @@ bool Internal::stabilizing () {
         if (stable) STOP (stable);
         else        STOP (unstable);
         stable = !stable;
-        if (opts.ccdclMode) {
-          if (stable) opts.ccdclMode = 1;
-          else opts.ccdclMode = 2;
+        if (ccdclHybridMode) {
+          if (stable) ccdclHybridMode = 1;
+          else ccdclHybridMode = 2;
 
           if (opts.ccdclAuxRemoveClauses && stable && stats.conflicts >= opts.ccdclAuxConflicts) {
 
@@ -86,7 +86,7 @@ bool Internal::stabilizing () {
 
                 // switch to pure CCDCL no encoding clasues
               delete_clauses_above_aux_cutoff ();
-              opts.ccdclMode = 0;
+              ccdclHybridMode = 0;
 
             }
 
@@ -126,9 +126,9 @@ bool Internal::stabilizing () {
         if (stable) STOP (stable);
         else        STOP (unstable);
         stable = !stable;
-        if (opts.ccdclMode) {
-          if (stable) opts.ccdclMode = 1;
-          else opts.ccdclMode = 2;
+        if (ccdclHybridMode) {
+          if (stable) ccdclHybridMode = 1;
+          else ccdclHybridMode = 2;
           clear_watches ();
           connect_watches ();
           backtrack();

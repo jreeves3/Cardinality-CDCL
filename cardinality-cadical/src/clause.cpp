@@ -483,6 +483,13 @@ void Internal::CARadd_new_original_clause (bool encoding) {
         exit (1);
       }
       if (tmp > 0) {
+        printf ("ERROR: Duplicate literals not supported in a cardinality constraint. \nERROR: Clause Guard %d Bound %d", original_guard, original_cardinality);
+        for (const auto & lit : original) {
+          printf (" %d", lit);
+        }
+        printf ("\n");
+        exit (1);
+
         LOG ("removing duplicated literal %d", lit);
       // } else if (tmp < 0) {
       //   LOG ("tautological since both %d and %d occur", -lit, lit);

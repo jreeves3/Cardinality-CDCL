@@ -26,8 +26,8 @@ sh clean.sh
 
 Solver configurations include:
 
-* CCDCL:    cardinality-based CDCL solver
-* CCDCL+:   cardinality-based CDCL solver with reencoded constraints
+* CCDCL:    cardinality-based CDCL solver (native propagation on cardinality constraints)
+* CCDCL+:   cardinality-based CDCL solver with reencoded constraints (Hybrid mode from the paper)
 * ReEncode: basic CaDiCaL CDCL solver with reencoded constraints
 
 For general usage with a KNF formula as input, you can use the cardinality CDCL solver directly with:
@@ -40,13 +40,35 @@ If you want to extract cardinality constraints from a CNF, or use one of the con
 
 The scripts also provide proof checking.
 
+## KNF format
+
+Header : `p knf  <nVariables> <nKlauses>`
+
+Cardinality Constraint : `k <bound> [<lit>] 0`
+
+x1 + x3 + -x5 >= 2 : `k 2 1 3 -5 0`
+
+Clauses written in standard dimacs format 
+
+(x1 OR x2 OR -x5) : `1 2 -5 0`
+
+Note, KNF does not support duplicate literals or opposing literals in cardinality constraints. 
+
+Remove opposing literals and update the bound appropriately in a preprocessing step before calling the solver. 
+
+E.g., x1 + -x1 + x2 + x3 >= 2 can be replaced by x2 + x3 >= 1.
+
+Duplicate literals can be replaced by new variables in a preprocessing step before calling the solver. 
+
+E.g., x1 + x1 + x2 >= 1 can be replaced by x3 + x4 + x2 >= 1 AND x1 <-> x3 AND x1 <-> x4. 
+
 ## Running Scripts
 
 To run configurations from the paper (on input CNF), and check result (as described in the paper):
 
 * CaDiCaL:  `> sh scripts/cadical <CNF>`
 * CCDCL:  `> sh scripts/ccdcl <CNF>`
-* CCDCL+: `> sh scripts/ccdclPlus <CNF>`
+* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <CNF>`
 * ReEncode: `> sh scripts/ReEncode <CNF>`
 
 e.g., `sh scripts/ccdcl.sh benchmarks/cnf/php8.cnf`
@@ -54,7 +76,7 @@ e.g., `sh scripts/ccdcl.sh benchmarks/cnf/php8.cnf`
 To run configurations from the paper (on input KNF), and check result (as described in the paper):
 
 * CCDCL:  `> sh scripts/ccdcl <KNF>`
-* CCDCL+: `> sh scripts/ccdclPlus <KNF>`
+* CCDCL+ (Hybrid mode): `> sh scripts/ccdclPlus <KNF>`
 * ReEncode: `> sh scripts/ReEncode <KNF>`
 
 e.g., `sh scripts/ccdcl.sh benchmarks/knf/php8.knf `

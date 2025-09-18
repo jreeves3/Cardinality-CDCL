@@ -64,6 +64,7 @@ Internal::~Internal () {
   if (tracer) delete tracer;
   if (checker) delete checker;
   if (vals) { vals -= vsize; delete [] vals; }
+  if (opts.ccdclMode) ccdclHybridMode = 1;
 }
 
 /*------------------------------------------------------------------------*/
@@ -268,9 +269,9 @@ int Internal::cdcl_loop_with_inprocessing () {
   if (stable) { START (stable);   report ('['); }
   else        { START (unstable); report ('{'); }
 
-  if (opts.ccdclMode) {
-    if (stable) opts.ccdclMode = 1;
-    else opts.ccdclMode = 2;
+  if (ccdclHybridMode) {
+    if (stable) ccdclHybridMode = 1;
+    else ccdclHybridMode = 2;
     clear_watches ();
     connect_watches ();
     printf(" Length of clauses %d and carKlauses %d and CarEncoded %d\n",clauses.size(), CARclauses.size(),CARencodingClauses.size());

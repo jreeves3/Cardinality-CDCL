@@ -34,21 +34,20 @@ OPTION( bump,              1,  0,  1,0,0,1, "bump variables") \
 OPTION( bumpreason,        1,  0,  1,0,0,1, "bump reason literals too") \
 OPTION( bumpreasondepth,   1,  1,  3,0,0,1, "bump reason depth") \
 OPTION( ccdclAuxConflicts,             1e6,  0,  2e9,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclAuxCut,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclAuxLevel,             60,  0,  1e9,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclAuxNoDecideMode,             0,  0,  1,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclAuxRemoveClauses,             0,  0,  1,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclBump,             0,  0,  1,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclBumpGuard,             0,  0,  1,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclEncoding,             0,  0,  2,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclEncodingActivity,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclEncodingByScore,             0,  0,  2,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclEncodingFirstConflict,             0,  0,  2e9,0,0,0, "bump extra on card clauses") \
-OPTION( ccdclInit,             0,  0,  1,0,0,0, "init card clauses with higher scores") \
-OPTION( ccdclMode,             0,  0,  3,0,0,0, "mode: 0 all, 1 only cardinality clauses, 2 only encoding clauses") \
-OPTION( ccdclNoDecideGuard,             0,  0,  1,0,0,0, "mode: 0 all, 1 only cardinality clauses, 2 only encoding clauses") \
+OPTION( ccdclAuxCut,             0,  0,  2e9,0,0,0, "Variables above auxCut are not decided on if ccdclAuxNoDecideMode is enabled") \
+OPTION( ccdclAuxLevel,             60,  0,  1e9,0,0,0, "Experimental (disabled) - minimum average level required for deleting clauses containing auxiliary variables (ccdclAuxRemoveClauses)") \
+OPTION( ccdclAuxNoDecideMode,             0,  0,  1,0,0,0, "prevents decisions on auxiliary variables (specified by auxCut)") \
+OPTION( ccdclAuxRemoveClauses,             0,  0,  0,0,0,0, "Experimental (disabled) - delete clauses containing auxiliary variables (specified by auxCut)") \
+OPTION( ccdclBump,             0,  0,  1,0,0,0, "bump twice extra on reason literals in cardinality constraints that appear in conflict analysis") \
+OPTION( ccdclBumpGuard,             0,  0,  1,0,0,0, "bump once extra on guard literals from guarded cardinality constraints appearing in conflict analysis") \
+OPTION( ccdclEncoding,             0,  0,  0,0,0,0, "Experimental (disabled) - would allow encoding of cardinality constraints during solving") \
+OPTION( ccdclEncodingActivity,             0,  0,  2e9,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving based on activity") \
+OPTION( ccdclEncodingByScore,             0,  0,  2,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving based on variable score") \
+OPTION( ccdclEncodingFirstConflict,             0,  0,  2e9,0,0,0, "Experimental (disabled) - encodes cardinality constraints during solving after this given number of conflicts") \
+OPTION( ccdclMode,           0,  0,  1,0,0,0, "enables hybrid CCDCL: no propagation on cardinality clauses during unstable mode") \
+OPTION( ccdclNoDecideGuard,             0,  0,  1,0,0,0, "prevents decisions on guard variables from guarded cardinality constraints") \
 OPTION( ccdclProp,             0,  0,  1,0,0,0, "use propagations count to switch modes") \
-OPTION( ccdclStabLim,             0,  0,  2e9,0,0,0, "sucessive times in stable mode") \
+OPTION( ccdclStabLim,             0,  0,  0,0,0,0, "Experimental (disabled) - sucessive times in stable mode") \
 OPTION( ccdclWalkSelect,             0,  0,  3,0,0,0, "mode: 0 weighted random selection, 1 cardinality first, 2 clauses first") \
 OPTION( ccdclWalkWtRule,             1,  0,  3,0,0,0, "mode: 0 single break, 1 linear break, 2 break * size, 3 break ^ 2") \
 OPTION( ccdclWatch,        0,  0,  1,0,0,0, "watch card clauses after binary clauses but before other clauses") \

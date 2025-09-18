@@ -263,6 +263,7 @@ struct Internal {
 
   /*----------------------------------------------------------------------*/
   // CCDCL 
+  int ccdclHybridMode; // 1 propagate verything (stable mode) 2 = no propagation on cardinality constraints (unstable mode)
   vector<int> printUnitVector;
   int CARwatch_in_garbage;
   int original_cardinality;

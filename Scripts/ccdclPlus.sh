@@ -56,7 +56,7 @@ then # CNF input formula
   echo "Start Cadical"
 
   # Run cadical on the propagated CNF, with a 5000 second timeout
-  ./$CCDCL $TMP/full.knf -t $TIMEOUT $TMP/solve.drat --no-binary --ccdclMode=1  --ccdclAuxCut=$AUX --ccdclStabLim=1  > $TMP/cadical.out
+  ./$CCDCL $TMP/full.knf -t $TIMEOUT $TMP/solve.drat --no-binary --ccdclMode=1   > $TMP/cadical.out
 
   echo "End Cadical"
 
@@ -155,7 +155,7 @@ else # KNF input formula
   echo "Start Cadical"
 
   # Run cadical on the propagated CNF, with a 5000 second timeout
-  ./$CCDCL $TMP/full.knf -t $TIMEOUT $TMP/solve.drat --no-binary --ccdclMode=1  --ccdclAuxCut=$AUX --ccdclStabLim=1  > $TMP/cadical.out
+  ./$CCDCL $TMP/full.knf -t $TIMEOUT $TMP/solve.drat --no-binary --ccdclMode=1  > $TMP/cadical.out
 
   echo "End Cadical"
 

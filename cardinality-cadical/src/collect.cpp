@@ -195,7 +195,7 @@ inline void Internal::CARswap_watched_literal (Clause *c, const int lit, int lit
   //     remove_watch (watches (r), c); // Drop this watch from the watch list of 'lit'.
   // }  // could simply update the watch pos, then have an else with CARwatch_literal
     
-  if (CARwatch_in_garbage && opts.ccdclMode != 2) {
+  if (CARwatch_in_garbage && ccdclHybridMode != 2) {
     // printf("unwwatch %d\n",lit);
     remove_watch (watches (lit), c); // Drop this watch from the watch list of 'lit'.
   // watch new literal at position my_lit_pos
@@ -251,7 +251,7 @@ void Internal::CARremove_falsified_and_satisfied_literals (Clause * c) {
   if (num_non_false == new_bound) return; // unit (is this possible? block with assertion)
   if (num_true) {// new bound decremented by number true literals
     // printf("unwwatch all\n");
-    if (CARwatch_in_garbage && opts.ccdclMode != 2)
+    if (CARwatch_in_garbage && ccdclHybridMode != 2)
       CARunwatch_some_literals (c, new_bound); // unwatch literals no longer needed
     if (c->unwatched == c->size+1) {
       if (CARwatch_in_garbage) remove_watch (watches (c->literals[new_bound]), c);
