@@ -65,6 +65,7 @@ Internal::~Internal () {
   if (checker) delete checker;
   if (vals) { vals -= vsize; delete [] vals; }
   if (opts.ccdclMode) ccdclHybridMode = 1;
+  else ccdclHybridMode = 0;
 }
 
 /*------------------------------------------------------------------------*/
