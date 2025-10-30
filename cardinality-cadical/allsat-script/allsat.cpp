@@ -231,6 +231,8 @@ int main (int argc, char *argv[]) {
   vector<vector<int>> clauses;
   vector<int> clause;
   bool isCardinality = false;
+  bool isConditional = false;
+  int cond_lit = 0;
   int card_bound = 0;
   while (infile >> s) {
     if (s == "c") { // parse a comment line
@@ -243,6 +245,15 @@ int main (int argc, char *argv[]) {
       solver->CARadd(card_bound); // add the cardinality bound
       continue;
     }
+    if (s == "g") { // parse a conditional constraint
+      isConditional = true;
+      isCardinality = true;
+      infile >> card_bound;
+      infile >> cond_lit;
+      solver->CARadd(card_bound); // add the cardinality bound
+      solver->CARaddGuard(cond_lit); // add the guard literal
+      continue;
+    }
     lit = stoi(s); // parse a literal; '0' for end of a clause
     if (isCardinality)
       solver->CARadd(lit); // add the literal to the cardinality constraint
@@ -251,6 +262,9 @@ int main (int argc, char *argv[]) {
 
     if (lit == 0) {
       isCardinality = false;
+      isConditional = false;
+      cond_lit = 0;
+      card_bound = 0;
     }
 
     if (minimizeSolution) {

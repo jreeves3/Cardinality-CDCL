@@ -218,6 +218,7 @@ public:
   // different from '0' except for 'add'.
 
  void CARadd (int lit, bool encoding = false);
+ void CARaddGuard (int lit);
 
   // Add valid literal to clause or zero to terminate clause.
   //
