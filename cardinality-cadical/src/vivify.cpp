@@ -468,7 +468,7 @@ void Internal::vivify_analyze_redundant (Vivifier & vivifier,
     if (c->size > 2) only_binary_reasons = false;
     stack.pop_back ();
     LOG (c, "vivify analyze");
-    if (c->unwatched == 2) { // normal clause
+    if (!c->cardinality_clause) { // normal clause
       for (const auto & lit : *c) {
         Var & v = var (lit);
         if (!v.level) continue;

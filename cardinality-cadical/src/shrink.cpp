@@ -223,7 +223,7 @@ namespace CaDiCaL {
       {
         const Clause &c = *v.reason;
         LOG(v.reason, "resolving with reason");
-        if (v.reason->unwatched > 2) {
+        if (v.reason->cardinality_clause) {
           // cardinality constraint
           Clause *reason = v.reason;
           for (int k = reason->unwatched; k < reason->size; k++) {

@@ -466,7 +466,7 @@ void Internal::update_reason_references () {
     Var & v = var (lit);
     Clause * c = v.reason;
     if (!c) continue;
-    if (c->unwatched > 2) continue; // CAR check
+    if (c->cardinality_clause) continue; // CAR check
     if (c->encoding) continue;
     LOG (c, "updating assigned %d reason", lit);
     assert (c->reason);
