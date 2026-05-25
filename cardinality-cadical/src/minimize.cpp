@@ -30,7 +30,7 @@ bool Internal::minimize_literal (int lit, int depth) {
   const const_literal_iterator end = v.reason->end ();
   const_literal_iterator i;
 
-  if (v.reason->unwatched > 2) {
+  if (v.reason->cardinality_clause) {
     // cardinality constraint
     Clause *reason = v.reason;
     for (int k = reason->unwatched; res && k < reason->size; k++) {

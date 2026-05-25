@@ -247,7 +247,7 @@ Internal::analyze_literal (int lit, int & open) {
 inline void
 Internal::CARanalyze_reason (int lit, Clause * reason, int & open) {
   assert (reason);
-  if (reason->unwatched == 2) { // normal clause
+  if (!reason->cardinality_clause) { // normal clause
     bump_clause (reason);
     for (const auto & other : *reason)
       if (other != lit)
