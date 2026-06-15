@@ -117,6 +117,14 @@ Example execution
 
 `python3 Tools/pysat_encode.py -k Benchmarks/KNF/magicsq-3.knf -c magicsq-3.cnf -e kmtotalizer`
 
+## Proximity Ordering
+
+```bash
+./Tools/proximity/proximity <KNF input> > <KNF output>
+```
+
+Produces a proximity ordered KNF (reordering literals within cardinality constraints). The new KNF can be piped into the PySAT encoding script. 
+
 ## Data
 
 For extraction and solving on the SAT Annivesary track benchmarks, as well as an extractor compariosn on PySAT.Card encodings, refer to the CAV24 repository: https://github.com/jreeves3/CAV24-FromClausesToKlauses and paper: https://www.cs.cmu.edu/~jereeves/research/cav24-paper.pdf
